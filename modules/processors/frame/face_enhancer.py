@@ -23,10 +23,7 @@ THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-ENHANCER"
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
-models_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
-)
-
+models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), 'models')
 
 def pre_check() -> bool:
     download_directory_path = models_dir
@@ -91,15 +88,13 @@ def process_frames(
         if progress:
             progress.update(1)
 
-
 def process_image(source_path: str, target_path: str, output_path: str) -> None:
     target_frame = cv2.imread(target_path)
     result = process_frame(None, target_frame)
     cv2.imwrite(output_path, result)
 
-
-def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
-    modules.processors.frame.core.process_video(None, temp_frame_paths, process_frames)
+def process_frame_list(source_path: str, temp_frame_paths: List[str]) -> None:
+    modules.processors.frame.core.process_frame_list(None, temp_frame_paths, process_frames)
 
 
 def process_frame_v2(temp_frame: Frame) -> Frame:

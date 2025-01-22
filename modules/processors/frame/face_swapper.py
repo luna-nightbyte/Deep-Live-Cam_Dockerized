@@ -21,10 +21,7 @@ THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
-models_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
-)
-
+models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), 'models')
 
 def pre_check() -> bool:
     download_directory_path = abs_dir
@@ -56,10 +53,9 @@ def pre_start() -> bool:
 
 def get_face_swapper() -> Any:
     global FACE_SWAPPER
-
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+            model_path = os.path.join(models_dir, 'inswapper_128.onnx')
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
             )
@@ -102,7 +98,7 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
     if modules.globals.many_faces:
-        many_faces = get_many_faces(temp_frame)
+        many_faces = get_many_faces(temp_frame) 
         if many_faces:
             for target_face in many_faces:
                 temp_frame = swap_face(source_face, target_face, temp_frame)
@@ -246,12 +242,16 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         result = process_frame_v2(target_frame)
         cv2.imwrite(output_path, result)
 
-
-def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
+def process_frame_list(source_path: str, temp_frame_paths: List[str]) -> None:
     if modules.globals.map_faces and modules.globals.many_faces:
         update_status(
             "Many faces enabled. Using first source image. Progressing...", NAME
         )
+    modules.processors.frame.core.process_frame_list(source_path, temp_frame_paths, process_frames)
+
+
+def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
+    
     modules.processors.frame.core.process_video(
         source_path, temp_frame_paths, process_frames
     )

@@ -13,8 +13,7 @@ FRAME_PROCESSORS_INTERFACE = [
     'pre_check',
     'pre_start',
     'process_frame',
-    'process_image',
-    'process_video'
+    'process_image'
 ]
 
 
@@ -37,23 +36,8 @@ def get_frame_processors_modules(frame_processors: List[str]) -> List[ModuleType
         for frame_processor in frame_processors:
             frame_processor_module = load_frame_processor_module(frame_processor)
             FRAME_PROCESSORS_MODULES.append(frame_processor_module)
-    set_frame_processors_modules_from_ui(frame_processors)
     return FRAME_PROCESSORS_MODULES
 
-def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
-    global FRAME_PROCESSORS_MODULES
-    for frame_processor, state in modules.globals.fp_ui.items():
-        if state == True and frame_processor not in frame_processors:
-            frame_processor_module = load_frame_processor_module(frame_processor)
-            FRAME_PROCESSORS_MODULES.append(frame_processor_module)
-            modules.globals.frame_processors.append(frame_processor)
-        if state == False:
-            try:
-                frame_processor_module = load_frame_processor_module(frame_processor)
-                FRAME_PROCESSORS_MODULES.remove(frame_processor_module)
-                modules.globals.frame_processors.remove(frame_processor)
-            except:
-                pass
 
 def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
     with ThreadPoolExecutor(max_workers=modules.globals.execution_threads) as executor:
@@ -65,7 +49,7 @@ def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_f
             future.result()
 
 
-def process_video(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:
+def process_frame_list(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:
     progress_bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
     total = len(frame_paths)
     with tqdm(total=total, desc='Processing', unit='frame', dynamic_ncols=True, bar_format=progress_bar_format) as progress:

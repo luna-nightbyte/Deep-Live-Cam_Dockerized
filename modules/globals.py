@@ -13,8 +13,16 @@ souce_target_map = []
 simple_map = {}
 
 source_path = None
+source_folder_path = None
+source_label = None
+
 target_path = None
+target_folder_path = None
+target_label = None
+
 output_path = None
+output_folder_path = None
+process_source_seperate = None
 frame_processors: List[str] = []
 keep_fps = True
 keep_audio = True
@@ -26,13 +34,13 @@ nsfw_filter = False
 video_encoder = None
 video_quality = None
 live_mirror = False
-live_resizable = True
+live_resizable = False
 max_memory = None
 execution_providers: List[str] = []
 execution_threads = None
 headless = None
+missing_args = None
 log_level = "error"
-fp_ui: Dict[str, bool] = {"face_enhancer": False}
 camera_input_combobox = None
 webcam_preview_running = False
 show_fps = False

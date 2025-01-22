@@ -14,12 +14,13 @@ import argparse
 import torch
 import onnxruntime
 import tensorflow
+from concurrent.futures import ThreadPoolExecutor
+from typing import List
 
 import modules.globals
 import modules.metadata
-import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, set_input_paths, save_metadata, read_metadata
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -31,9 +32,12 @@ warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 def parse_args() -> None:
     signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
     program = argparse.ArgumentParser()
-    program.add_argument('-s', '--source', help='select an source image', dest='source_path')
-    program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
-    program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
+    program.add_argument('-s', '--source', help='select a source containing source faces', dest='source_path')
+    program.add_argument('-t', '--target', help='select a folder containing targets', dest='target_path')
+    program.add_argument('-o', '--output', help='select output directory', dest='output_path')
+    program.add_argument('-sf', '--source-folder', help='select a source containing source faces', dest='source_folder_path')
+    program.add_argument('-tf', '--target-folder', help='select a folder containing targets', dest='target_folder_path')
+    program.add_argument('-of', '--output-folder', help='select output directory', dest='output_folder_path')
     program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
@@ -41,10 +45,9 @@ def parse_args() -> None:
     program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true', default=False)
     program.add_argument('--nsfw-filter', help='filter the NSFW image or video', dest='nsfw_filter', action='store_true', default=False)
     program.add_argument('--map-faces', help='map source target faces', dest='map_faces', action='store_true', default=False)
-    program.add_argument('--mouth-mask', help='mask the mouth region', dest='mouth_mask', action='store_true', default=False)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
-    program.add_argument('-l', '--lang', help='Ui language', default="en")
+    program.add_argument('--mouth-mask', help='mask the mouth region', dest='mouth_mask', action='store_true', default=False)
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
@@ -60,11 +63,15 @@ def parse_args() -> None:
 
     args = program.parse_args()
 
+    modules.globals.source_folder_path = args.source_folder_path
+    modules.globals.target_folder_path = args.target_folder_path
+    modules.globals.output_folder_path = args.output_folder_path
+    print(modules.globals.output_folder_path)
     modules.globals.source_path = args.source_path
     modules.globals.target_path = args.target_path
-    modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
-    modules.globals.frame_processors = args.frame_processor
-    modules.globals.headless = args.source_path or args.target_path or args.output_path
+    # modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
+    modules.globals.frame_processors = args.frame_processor 
+    modules.globals.missing_args = (not args.source_path and not args.target_path and not args.output_path) or ( not args.source_folder_path and not args.target_folder_path and not args.target_folder_path)
     modules.globals.keep_fps = args.keep_fps
     modules.globals.keep_audio = args.keep_audio
     modules.globals.keep_frames = args.keep_frames
@@ -80,12 +87,6 @@ def parse_args() -> None:
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
     modules.globals.lang = args.lang
-
-    #for ENHANCER tumbler:
-    if 'face_enhancer' in args.frame_processor:
-        modules.globals.fp_ui['face_enhancer'] = True
-    else:
-        modules.globals.fp_ui['face_enhancer'] = False
 
     # translate deprecated args
     if args.source_path_deprecated:
@@ -172,72 +173,165 @@ def pre_check() -> bool:
 
 def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     print(f'[{scope}] {message}')
-    if not modules.globals.headless:
-        ui.update_status(message)
 
-def start() -> None:
-    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        if not frame_processor.pre_start():
-            return
-    update_status('Processing...')
-    # process image to image
-    if has_image_extension(modules.globals.target_path):
-        if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-            return
-        try:
-            shutil.copy2(modules.globals.target_path, modules.globals.output_path)
-        except Exception as e:
-            print("Error copying file:", str(e))
-        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-            update_status('Progressing...', frame_processor.NAME)
-            frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
-            release_resources()
-        if is_image(modules.globals.target_path):
-            update_status('Processing to image succeed!')
+        
+
+def process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList_1, indexList_2, ext_types):
+    try:
+        if file_1 in processedFiles and file_2 in processedFiles:
+            return processedFiles
+        if not file_1 in processedFiles:
+            processedFiles.append(file_1)
+        if not file_2 in processedFiles:
+            processedFiles.append(file_2)
+            
+
+        if modules.globals.process_source_seperate:
+            SourceIndexList = indexList_2
+            TargetIndexList = indexList_2
+            SourceFile = file_2
+            TargetFile = file_1
         else:
-            update_status('Processing to image failed!')
-        return
-    # process image to videos
-    if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-        return
+            SourceIndexList = indexList_1
+            TargetIndexList = indexList_1
+            SourceFile = file_1
+            TargetFile = file_2
+            
+        update_status(f"Processing [{SourceFile} ---> {TargetFile}]")
+        err = set_input_paths(SourceFile, TargetFile)
+        if err:
+            print(err)
+            return processedFiles
+        
+        target_file_name = os.path.join(modules.globals.target_folder_path, TargetFile)
 
-    if not modules.globals.map_faces:
-        update_status('Creating temp resources...')
-        create_temp(modules.globals.target_path)
-        update_status('Extracting frames...')
-        extract_frames(modules.globals.target_path)
+        replacement_ext = None
+        for ext in ext_types:
+            if target_file_name.endswith(ext):
+                replacement_ext = ext
+                break
 
-    temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
-    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
-        release_resources()
-    # handles fps
-    if modules.globals.keep_fps:
+        if not replacement_ext:
+            print(f"Unknown extension for file: {target_file_name}")
+            return processedFiles
+
+        
+        # process image to videos
+        if modules.globals.nsfw_filter:
+            return
+        if not modules.globals.map_faces:
+            update_status('Creating temp resources...')
+            create_temp(modules.globals.target_path)
+            update_status('Extracting frames...')
+            extract_frames(modules.globals.target_path)
+
+        temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+        #for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+        update_status(f'Progressing... {modules.globals.output_path}', frame_processor.NAME)
+        frame_processor.process_frame_list(modules.globals.source_path, temp_frame_paths)
+        # handles fps
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
         update_status(f'Creating video with {fps} fps...')
         create_video(modules.globals.target_path, fps)
-    else:
-        update_status('Creating video with 30.0 fps...')
-        create_video(modules.globals.target_path)
-    # handle audio
-    if modules.globals.keep_audio:
-        if modules.globals.keep_fps:
-            update_status('Restoring audio...')
-        else:
-            update_status('Restoring audio might cause issues as fps are not kept...')
+        # handle audio
+        update_status('Restoring audio..')
         restore_audio(modules.globals.target_path, modules.globals.output_path)
-    else:
         move_temp(modules.globals.target_path, modules.globals.output_path)
-    # clean and validate
-    clean_temp(modules.globals.target_path)
-    if is_video(modules.globals.target_path):
-        update_status('Processing to video succeed!')
-    else:
-        update_status('Processing to video failed!')
+        # clean and validate
+        clean_temp(modules.globals.target_path)
+        if is_video(modules.globals.target_path):
+            update_status('Processing to video succeed!') 
+        else:
+            update_status('Processing to video failed!')
 
+    except Exception as e:
+        print(f"Error processing files {modules.globals.source_path} and {modules.globals.target_path}: {e}")
+    return processedFiles
 
+        
+
+face_enhancer_targets=[]
+def pre_startup() -> None:
+    from os import walk
+    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+    for frame_processor in frame_processors:
+        ext_types = [".png", ".jpg", ".gif", ".bmp", ".mkv", ".mp4"]
+        sourceFiles = next(walk(modules.globals.source_folder_path), (None, None, []))[2]
+        targetFiles = next(walk(modules.globals.target_folder_path), (None, None, []))[2]
+
+        update_status(f"[{frame_processor}] Processing {len(sourceFiles)} source files and {len(targetFiles)} target files")
+        
+        image_target_files = []
+        video_target_files = []
+        
+        if frame_processor != frame_processors[0]:
+            targetFiles = []
+            for file in face_enhancer_targets:
+                targetFiles.append(file)
+                
+        target_counter = 0
+        for target_file in targetFiles:
+            target_counter+=1
+            if has_image_extension(target_file):
+                try:
+                    if frame_processor == frame_processors[0]:
+                        modules.globals.output_path = os.path.join(
+                                modules.globals.output_folder_path,
+                                f"{target_counter}_{os.path.basename(target_file)}"
+                            )
+                        modules.globals.target_path = os.path.join(
+                                modules.globals.target_folder_path,
+                                os.path.basename(target_file)
+                            )
+                        
+                        face_enhancer_targets.append(modules.globals.output_path)
+                        shutil.copy2(modules.globals.target_path, modules.globals.output_path)
+                        print(f"Generated output path: {modules.globals.output_path}")
+                    else:
+                        modules.globals.output_path =   os.path.join(
+                            modules.globals.output_folder_path,
+                            f"{os.path.basename(target_file)}"
+                            )
+                        modules.globals.target_path = modules.globals.output_path 
+                except Exception as e:
+                    print("Error copying file:", str(e),modules.globals.target_path)
+
+                image_target_files.append(modules.globals.target_path)
+            else:
+                video_target_files.append(target_file)
+
+        if len(image_target_files) != 0:
+            for source_file in sourceFiles:
+                sourceBaseFileName = os.path.splitext(source_file)[0]
+                
+                modules.globals.source_path = os.path.join(modules.globals.source_folder_path, source_file)
+                
+                frame_processor.process_frame_list(modules.globals.source_path, image_target_files)
+                
+        if len(video_target_files) == 0:
+            continue
+        
+        if modules.globals.process_source_seperate:
+            fileList_1 = video_target_files
+            fileList_2 = sourceFiles
+        else:
+            fileList_1 = sourceFiles
+            fileList_2 = video_target_files
+        total_files = len(video_target_files)*len(sourceFiles)
+        counter = 0
+        processedFiles = []
+                
+        for indexList_1, file_1 in enumerate(fileList_1):
+            for indexList_2, file_2 in enumerate(fileList_2):
+                counter+=1
+                print(f"\nProcessing [{counter}/{total_files}]" )
+                processedFiles = process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList_1, indexList_2, ext_types)
+                if frame_processor == frame_processors[0]:
+                    face_enhancer_targets.append(modules.globals.output_path)
+                
+    release_resources()
+      
 def destroy(to_quit=True) -> None:
     if modules.globals.target_path:
         clean_temp(modules.globals.target_path)

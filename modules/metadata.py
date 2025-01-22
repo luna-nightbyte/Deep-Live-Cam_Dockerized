@@ -1,3 +1,3 @@
-name = 'Deep-Live-Cam'
-version = '1.8'
-edition = 'GitHub Edition'
+name = 'FaceSwapper'
+version = '1.8-Auto_Batch'
+edition = 'Github Edition'

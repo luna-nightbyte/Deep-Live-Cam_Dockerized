@@ -188,12 +188,12 @@ def process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList
 
         if modules.globals.process_source_seperate:
             SourceIndexList = indexList_2
-            TargetIndexList = indexList_2
+            TargetIndexList = indexList_1
             SourceFile = file_2
             TargetFile = file_1
         else:
             SourceIndexList = indexList_1
-            TargetIndexList = indexList_1
+            TargetIndexList = indexList_2
             SourceFile = file_1
             TargetFile = file_2
             

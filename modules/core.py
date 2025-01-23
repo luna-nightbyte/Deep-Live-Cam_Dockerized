@@ -220,7 +220,6 @@ def process_video_files(processedFiles, source_file, target_file, ext_types):
         update_status(f'Progressing... {modules.globals.output_path}')
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             frame_processor.process_frame_list(modules.globals.source_path, temp_frame_paths)
-            frame_processor.process_frame_list(modules.globals.source_path, temp_frame_paths)
         # handles fps
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
@@ -281,7 +280,6 @@ def start() -> None:
                 video_target_files.append(target_file)
             
     if len(image_target_files) != 0:
-        i=0
         for source_index, source_file in enumerate(sourceFiles):
             
             modules.globals.source_path = None
@@ -297,8 +295,7 @@ def start() -> None:
                 continue     
             for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
                 frame_processor.process_frame_list(modules.globals.source_path, target_files)
-                frame_processor.process_frame_list(modules.globals.source_path, target_files)
-            i+=1
+            
             break
     if len(video_target_files) == 0:
         return

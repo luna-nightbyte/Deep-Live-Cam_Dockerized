@@ -16,7 +16,8 @@ import onnxruntime
 import tensorflow
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
-
+from os import walk
+    
 import modules.globals
 import modules.metadata
 from modules.processors.frame.core import get_frame_processors_modules
@@ -35,6 +36,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select a source containing source faces', dest='source_path')
     program.add_argument('-t', '--target', help='select a folder containing targets', dest='target_path')
     program.add_argument('-o', '--output', help='select output directory', dest='output_path')
+    program.add_argument('-l', '--lang', help='select output directory', dest='lang')
     program.add_argument('-sf', '--source-folder', help='select a source containing source faces', dest='source_folder_path')
     program.add_argument('-tf', '--target-folder', help='select a folder containing targets', dest='target_folder_path')
     program.add_argument('-of', '--output-folder', help='select output directory', dest='output_folder_path')
@@ -174,36 +176,26 @@ def pre_check() -> bool:
 def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     print(f'[{scope}] {message}')
 
-        
 
-def process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList_1, indexList_2, ext_types):
+
+
+
+def process_video_files(processedFiles, source_file, target_file, ext_types):
     try:
-        if file_1 in processedFiles and file_2 in processedFiles:
+        if source_file in processedFiles and target_file in processedFiles:
             return processedFiles
-        if not file_1 in processedFiles:
-            processedFiles.append(file_1)
-        if not file_2 in processedFiles:
-            processedFiles.append(file_2)
-            
+        if not source_file in processedFiles:
+            processedFiles.append(source_file)
+        if not target_file in processedFiles:
+            processedFiles.append(target_file)
 
-        if modules.globals.process_source_seperate:
-            SourceIndexList = indexList_2
-            TargetIndexList = indexList_1
-            SourceFile = file_2
-            TargetFile = file_1
-        else:
-            SourceIndexList = indexList_1
-            TargetIndexList = indexList_2
-            SourceFile = file_1
-            TargetFile = file_2
-            
-        update_status(f"Processing [{SourceFile} ---> {TargetFile}]")
-        err = set_input_paths(SourceFile, TargetFile)
+        update_status(f"Processing [{source_file} ---> {target_file}]")
+        err = set_input_paths(source_file, target_file)
         if err:
             print(err)
             return processedFiles
         
-        target_file_name = os.path.join(modules.globals.target_folder_path, TargetFile)
+        target_file_name = os.path.join(modules.globals.target_folder_path, target_file)
 
         replacement_ext = None
         for ext in ext_types:
@@ -214,7 +206,6 @@ def process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList
         if not replacement_ext:
             print(f"Unknown extension for file: {target_file_name}")
             return processedFiles
-
         
         # process image to videos
         if modules.globals.nsfw_filter:
@@ -226,9 +217,10 @@ def process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList
             extract_frames(modules.globals.target_path)
 
         temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
-        #for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        update_status(f'Progressing... {modules.globals.output_path}', frame_processor.NAME)
-        frame_processor.process_frame_list(modules.globals.source_path, temp_frame_paths)
+        update_status(f'Progressing... {modules.globals.output_path}')
+        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+            frame_processor.process_frame_list(modules.globals.source_path, temp_frame_paths)
+            frame_processor.process_frame_list(modules.globals.source_path, temp_frame_paths)
         # handles fps
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
@@ -249,87 +241,88 @@ def process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList
         print(f"Error processing files {modules.globals.source_path} and {modules.globals.target_path}: {e}")
     return processedFiles
 
+def start() -> None:
+    
+    # Used by images to store a list of target with their sources.
+    class Targets:
+        def __init__(self):
+            self.targets = []  # Initialize an empty list to store targets
+        def append(self, index, source_file, output_path):
+            self.targets.append((index, source_file, output_path))
+        def __iter__(self):
+            return iter(self.targets)
         
+    face_enhancer_image_targets=Targets()
+    
+    ext_types = [".png", ".jpg", ".gif", ".bmp", ".mkv", ".mp4"]
+    sourceFiles = next(walk(modules.globals.source_folder_path), (None, None, []))[2]
+    targetFiles = next(walk(modules.globals.target_folder_path), (None, None, []))[2]
+    update_status(f"Processing {len(sourceFiles)} source files and {len(targetFiles)} target files")
+    
+    image_target_files = []
+    video_target_files = []
 
-face_enhancer_targets=[]
-def pre_startup() -> None:
-    from os import walk
-    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    for frame_processor in frame_processors:
-        ext_types = [".png", ".jpg", ".gif", ".bmp", ".mkv", ".mp4"]
-        sourceFiles = next(walk(modules.globals.source_folder_path), (None, None, []))[2]
-        targetFiles = next(walk(modules.globals.target_folder_path), (None, None, []))[2]
-
-        update_status(f"[{frame_processor}] Processing {len(sourceFiles)} source files and {len(targetFiles)} target files")
-        
-        image_target_files = []
-        video_target_files = []
-        
-        if frame_processor != frame_processors[0]:
-            targetFiles = []
-            for file in face_enhancer_targets:
-                targetFiles.append(file)
-                
-        target_counter = 0
+    for indexList_1, source_file in enumerate(sourceFiles):
+        source_name = os.path.splitext(os.path.basename(source_file))[0]
         for target_file in targetFiles:
-            target_counter+=1
+            modules.globals.output_path = os.path.join(modules.globals.output_folder_path, f"{source_file}_{os.path.basename(target_file)}")
+            modules.globals.target_path = os.path.join(modules.globals.target_folder_path, os.path.basename(target_file))
+
             if has_image_extension(target_file):
                 try:
-                    if frame_processor == frame_processors[0]:
-                        modules.globals.output_path = os.path.join(
-                                modules.globals.output_folder_path,
-                                f"{target_counter}_{os.path.basename(target_file)}"
-                            )
-                        modules.globals.target_path = os.path.join(
-                                modules.globals.target_folder_path,
-                                os.path.basename(target_file)
-                            )
-                        
-                        face_enhancer_targets.append(modules.globals.output_path)
-                        shutil.copy2(modules.globals.target_path, modules.globals.output_path)
-                        print(f"Generated output path: {modules.globals.output_path}")
-                    else:
-                        modules.globals.output_path =   os.path.join(
-                            modules.globals.output_folder_path,
-                            f"{os.path.basename(target_file)}"
-                            )
-                        modules.globals.target_path = modules.globals.output_path 
+                    shutil.copy2(modules.globals.target_path, modules.globals.output_path)
+                    print(f"Generated output path: {modules.globals.output_path}")
+                    modules.globals.target_path = modules.globals.output_path 
                 except Exception as e:
-                    print("Error copying file:", str(e),modules.globals.target_path)
-
+                    print("Error copying file:", str(e), modules.globals.target_path)
+                face_enhancer_image_targets.append(indexList_1, source_file, modules.globals.output_path)
                 image_target_files.append(modules.globals.target_path)
             else:
                 video_target_files.append(target_file)
+            
+    if len(image_target_files) != 0:
+        i=0
+        for source_index, source_file in enumerate(sourceFiles):
+            
+            modules.globals.source_path = None
+            continueloop = False
+            target_files = []
+            for index, source_file, output_path in face_enhancer_image_targets:
+                if source_index == index:
+                    modules.globals.source_path = os.path.join(modules.globals.source_folder_path, source_file)
+                    target_files.append(output_path)
 
-        if len(image_target_files) != 0:
-            for source_file in sourceFiles:
-                sourceBaseFileName = os.path.splitext(source_file)[0]
-                
-                modules.globals.source_path = os.path.join(modules.globals.source_folder_path, source_file)
-                
-                frame_processor.process_frame_list(modules.globals.source_path, image_target_files)
-                
-        if len(video_target_files) == 0:
-            continue
+            if len(target_files) == 0:
+                print("No source and/or target image(s) found..")
+                continue     
+            for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+                frame_processor.process_frame_list(modules.globals.source_path, target_files)
+                frame_processor.process_frame_list(modules.globals.source_path, target_files)
+            i+=1
+            break
+    if len(video_target_files) == 0:
+        return
+    
+    total_files = len(video_target_files)*len(sourceFiles)
+    counter = 0
+    processedFiles = []
+            
+            
+    for indexList_1, source_file in enumerate(sourceFiles):
         
-        if modules.globals.process_source_seperate:
-            fileList_1 = video_target_files
-            fileList_2 = sourceFiles
-        else:
-            fileList_1 = sourceFiles
-            fileList_2 = video_target_files
-        total_files = len(video_target_files)*len(sourceFiles)
-        counter = 0
-        processedFiles = []
-                
-        for indexList_1, file_1 in enumerate(fileList_1):
-            for indexList_2, file_2 in enumerate(fileList_2):
-                counter+=1
-                print(f"\nProcessing [{counter}/{total_files}]" )
-                processedFiles = process_file_pair(processedFiles, frame_processor, file_1, file_2, indexList_1, indexList_2, ext_types)
-                if frame_processor == frame_processors[0]:
-                    face_enhancer_targets.append(modules.globals.output_path)
-                
+        source_name = os.path.splitext(os.path.basename(source_file))[0]
+        for indexList_2, target_file in enumerate(video_target_files):
+            
+            target_name, extension = os.path.splitext(os.path.basename(target_file))
+            
+            modules.globals.output_path =   os.path.join(
+                modules.globals.output_folder_path,
+                f"{source_name}_{target_name}.{extension}"
+                ) 
+            counter+=1
+            print(f"\nProcessing [{counter}/{total_files}]" )
+            processedFiles = process_video_files(processedFiles, source_file, target_file, ext_types)
+            
     release_resources()
       
 def destroy(to_quit=True) -> None:
@@ -346,8 +339,5 @@ def run() -> None:
         if not frame_processor.pre_check():
             return
     limit_resources()
-    if modules.globals.headless:
-        start()
-    else:
-        window = ui.init(start, destroy, modules.globals.lang)
-        window.mainloop()
+    start()
+    

@@ -1,3 +1,15 @@
+<h1 align="center">Deep-Batch-Swapper</h1>
+
+<p align="center">
+  This is a CLI version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam). This uses batch processing with folders as inputs (single files are probably supported, but not tested since files can just be put into a folder.).
+  Deepfaken face swap videos and images with a single click using docker container.
+
+Modify docker-compose, input dirs in `run.py` and start the container.
+</p>
+
+
+# Original readme:
+
 <h1 align="center">Deep-Live-Cam</h1>
 
 <p align="center">

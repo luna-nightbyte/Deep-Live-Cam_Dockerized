@@ -3,9 +3,9 @@
 # pip install onnxruntime onnxruntime-gpu==1.18.0 insightface
 ### Output paths
 root_output="output"
-source_dir="${root_output}/database/Sources/all/i" 
-target_dir="${root_output}/mytube/videos"
-output_dir="${root_output}/mytube/swapped"
+source_dir="${root_output}/source_files" 
+target_dir="${root_output}/target_files"
+output_dir="${root_output}/output_files"
 # Function to process a single file
 process_file() {
     local source_file="$1"

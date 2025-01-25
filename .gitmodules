@@ -1,0 +1,3 @@
+[submodule "goStreamer"]
+	path = goStreamer
+	url = https://github.com/luna-nightbyte/goStreamer

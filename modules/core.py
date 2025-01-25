@@ -182,13 +182,7 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
 
 def process_video_files(processedFiles, source_file, target_file, ext_types):
     try:
-        if source_file in processedFiles and target_file in processedFiles:
-            return processedFiles
-        if not source_file in processedFiles:
-            processedFiles.append(source_file)
-        if not target_file in processedFiles:
-            processedFiles.append(target_file)
-
+    
         update_status(f"Processing [{source_file} ---> {target_file}]")
         err = set_input_paths(source_file, target_file)
         if err:
@@ -239,18 +233,33 @@ def process_video_files(processedFiles, source_file, target_file, ext_types):
     except Exception as e:
         print(f"Error processing files {modules.globals.source_path} and {modules.globals.target_path}: {e}")
     return processedFiles
+class Targets:
+    def __init__(self):
+        self.targets = []  # Initialize an empty list to store targets
 
+    def append(self, index, source_file, target_path, output_path, is_processed: bool):
+        self.targets.append((index, source_file, target_path, output_path, is_processed))
+
+    def set_processed(self,index, t):
+        # Find the target with the given index and update its is_processed status
+        for i, target in enumerate(self.targets):
+            if target[2] == t and target[0] == index:
+                # Update the tuple with is_processed set to True
+                self.targets[i] = (
+                    target[0],  # index
+                    target[1],  # source_file
+                    target[2],  # target_path
+                    target[3],  # output_path
+                    True,       # is_processed
+                )
+                return
+        raise ValueError(f"Target with index {index} not found.")
+
+    def __iter__(self):
+        return iter(self.targets)
 def start() -> None:
     
-    # Used by images to store a list of target with their sources.
-    class Targets:
-        def __init__(self):
-            self.targets = []  # Initialize an empty list to store targets
-        def append(self, index, source_file, output_path):
-            self.targets.append((index, source_file, output_path))
-        def __iter__(self):
-            return iter(self.targets)
-        
+ 
     face_enhancer_image_targets=Targets()
     
     ext_types = [".png", ".jpg", ".gif", ".bmp", ".mkv", ".mp4"]
@@ -264,17 +273,11 @@ def start() -> None:
     for indexList_1, source_file in enumerate(sourceFiles):
         source_name = os.path.splitext(os.path.basename(source_file))[0]
         for target_file in targetFiles:
-            modules.globals.output_path = os.path.join(modules.globals.output_folder_path, f"{source_file}_{os.path.basename(target_file)}")
+            modules.globals.output_path = os.path.join(modules.globals.output_folder_path, f"{source_name}_{os.path.basename(target_file)}")
             modules.globals.target_path = os.path.join(modules.globals.target_folder_path, os.path.basename(target_file))
 
             if has_image_extension(target_file):
-                try:
-                    shutil.copy2(modules.globals.target_path, modules.globals.output_path)
-                    print(f"Generated output path: {modules.globals.output_path}")
-                    modules.globals.target_path = modules.globals.output_path 
-                except Exception as e:
-                    print("Error copying file:", str(e), modules.globals.target_path)
-                face_enhancer_image_targets.append(indexList_1, source_file, modules.globals.output_path)
+                face_enhancer_image_targets.append(indexList_1, source_file, modules.globals.target_path, modules.globals.output_path, False)
                 image_target_files.append(modules.globals.target_path)
             else:
                 video_target_files.append(target_file)
@@ -285,8 +288,14 @@ def start() -> None:
             modules.globals.source_path = None
             continueloop = False
             target_files = []
-            for index, source_file, output_path in face_enhancer_image_targets:
+            for index, source_file, target_file, output_path, is_processed in face_enhancer_image_targets:
                 if source_index == index:
+                    try:
+                        shutil.copy2(target_file, output_path)
+                        print(f"Generated output path: {modules.globals.output_path}")
+                        # modules.globals.target_path = modules.globals.output_path 
+                    except Exception as e:
+                        print("Error copying file:", str(e), modules.globals.target_path)
                     modules.globals.source_path = os.path.join(modules.globals.source_folder_path, source_file)
                     target_files.append(output_path)
 
@@ -295,23 +304,31 @@ def start() -> None:
                 continue     
             for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
                 frame_processor.process_frame_list(modules.globals.source_path, target_files)
-            
-            break
+
     if len(video_target_files) == 0:
         return
     
-    total_files = len(video_target_files)*len(sourceFiles)
+    total_files = len(sourceFiles)*len(targetFiles)
     counter = 0
+    c=0
     processedFiles = []
-            
-            
+    
     for indexList_1, source_file in enumerate(sourceFiles):
-        
         source_name = os.path.splitext(os.path.basename(source_file))[0]
         for indexList_2, target_file in enumerate(video_target_files):
             
-            target_name, extension = os.path.splitext(os.path.basename(target_file))
             
+            print(source_file, target_file)
+            
+            target_name, extension = os.path.splitext(os.path.basename(target_file))
+            modules.globals.source_path =   os.path.join(
+                modules.globals.source_folder_path,
+                source_file
+                )
+            modules.globals.target_path =   os.path.join(
+                modules.globals.target_folder_path,
+                target_file
+                )
             modules.globals.output_path =   os.path.join(
                 modules.globals.output_folder_path,
                 f"{source_name}_{target_name}.{extension}"
@@ -319,7 +336,9 @@ def start() -> None:
             counter+=1
             print(f"\nProcessing [{counter}/{total_files}]" )
             processedFiles = process_video_files(processedFiles, source_file, target_file, ext_types)
-            
+         
+            c+=1
+        
     release_resources()
       
 def destroy(to_quit=True) -> None:

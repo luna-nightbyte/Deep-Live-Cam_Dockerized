@@ -17,7 +17,7 @@ from modules.face_analyser import (
     has_valid_map,
     simplify_maps,
 )
-from modules.capturer import get_video_frame, get_video_frame_total
+from modules.capturer import get_video_frame, get_video_frame_total, GoStreamerCapturer
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import (
     is_image,
@@ -79,6 +79,11 @@ target_label_dict_live = {}
 img_ft, vid_ft = modules.globals.file_types
 
 
+
+# Global variables to manage the streamer state
+GOSTREAMER_IS_RUNNING = False
+GoCapturer = None
+
 def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
     global ROOT, PREVIEW, _
 
@@ -91,6 +96,7 @@ def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> c
 
 
 def save_switch_states():
+    global GOSTREAMER_IS_RUNNING, GoCapturer
     switch_states = {
         "keep_fps": modules.globals.keep_fps,
         "keep_audio": modules.globals.keep_audio,
@@ -137,6 +143,7 @@ def load_switch_states():
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     global source_label, target_label, status_label, show_fps_switch
 
+    global GOSTREAMER_IS_RUNNING, GoCapturer
     load_switch_states()
 
     ctk.deactivate_automatic_dpi_awareness()
@@ -327,15 +334,23 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
-
     if not camera_names or camera_names[0] == "No cameras found":
-        camera_variable = ctk.StringVar(value="No cameras found")
-        camera_optionmenu = ctk.CTkOptionMenu(
-            root,
-            variable=camera_variable,
-            values=["No cameras found"],
-            state="disabled",
-        )
+        if GOSTREAMER_IS_RUNNING:
+            camera_variable = ctk.StringVar(value="Streamer is running")
+            camera_optionmenu = ctk.CTkOptionMenu(
+                root,
+                variable=camera_variable,
+                values=["Streamer is running"],
+                state="normal",
+            )
+        else:
+            camera_variable = ctk.StringVar(value="No cameras found")
+            camera_optionmenu = ctk.CTkOptionMenu(
+                root,
+                variable=camera_variable,
+                values=["No cameras found"],
+                state="disabled",
+            )
     else:
         camera_variable = ctk.StringVar(value=camera_names[0])
         camera_optionmenu = ctk.CTkOptionMenu(
@@ -352,16 +367,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root,
             (
                 camera_indices[camera_names.index(camera_variable.get())]
-                if camera_names and camera_names[0] != "No cameras found"
+                if GOSTREAMER_IS_RUNNING and (camera_names and camera_names[0] != "No cameras found")
                 else None
             ),
         ),
         state=(
             "normal"
-            if camera_names and camera_names[0] != "No cameras found"
+            if GOSTREAMER_IS_RUNNING or (camera_names and camera_names[0] != "No cameras found")
             else "disabled"
         ),
     )
+    
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
 
@@ -381,6 +397,40 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     return root
 
+import socket
+import cv2
+
+import socket
+import cv2
+
+def goStreamer():
+    global GOSTREAMER_IS_RUNNING, GoCapturer
+
+    host = '0.0.0.0'
+    port = 5000
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, port))
+    server_socket.listen(1)
+
+    print(f"Receiver is listening on {host}:{port}...")
+
+    GOSTREAMER_IS_RUNNING = True
+    conn, addr = server_socket.accept()
+    print(f"Connection established with {addr}")
+
+    GoCapturer = GoStreamerCapturer(conn)
+    try:
+        # Keep connection alive for the capture process
+        while GOSTREAMER_IS_RUNNING:
+            pass
+    except Exception as e:
+        print(f"Error in GoStreamer: {e}")
+    finally:
+        GOSTREAMER_IS_RUNNING = False
+        GoCapturer.release()
+        server_socket.close()
+        
 def close_mapper_window():
     global POPUP, POPUP_LIVE
     if POPUP and POPUP.winfo_exists():
@@ -698,17 +748,28 @@ def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
 def fit_image_to_size(image, width: int, height: int):
     if width is None and height is None:
         return image
+
     h, w, _ = image.shape
     ratio_h = 0.0
     ratio_w = 0.0
-    if width > height:
-        ratio_h = height / h
-    else:
+    
+    # Avoid zero or negative ratios
+    if width is not None and width > 0:
         ratio_w = width / w
+    if height is not None and height > 0:
+        ratio_h = height / h
+
     ratio = max(ratio_w, ratio_h)
     new_size = (int(ratio * w), int(ratio * h))
-    return cv2.resize(image, dsize=new_size)
 
+    # Check if the new size is valid
+    if new_size[0] > 0 and new_size[1] > 0:
+        resized_image = cv2.resize(image, dsize=new_size)
+        cv2.imshow("Resized Image", resized_image)
+        return resized_image
+    else:
+        print("Invalid new size. Width and height must be positive.")
+        return image  # Return the original image if the size is invalid
 
 def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
     image = Image.open(image_path)
@@ -821,7 +882,7 @@ def get_available_cameras():
                     return test_indices[: len(working_cameras)], working_cameras
 
             # If still no cameras found, return empty lists
-            if not camera_names:
+            if not camera_names and not GOSTREAMER_IS_RUNNING:
                 return [], ["No cameras found"]
 
             return camera_indices, camera_names
@@ -858,16 +919,22 @@ def get_available_cameras():
                     camera_names.append(f"Camera {i}")
                     cap.release()
 
-        if not camera_names:
+        if not camera_names and not GOSTREAMER_IS_RUNNING:
             return [], ["No cameras found"]
 
         return camera_indices, camera_names
 
 
+        
 def create_webcam_preview(camera_index: int):
     global preview_label, PREVIEW
+    global GOSTREAMER_IS_RUNNING, GoCapturer
 
-    cap = VideoCapturer(camera_index)
+    if GOSTREAMER_IS_RUNNING and GoCapturer:
+        cap = GoCapturer
+    else:
+        cap = VideoCapturer(camera_index)
+    
     if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
         update_status("Failed to start camera")
         return
@@ -883,10 +950,14 @@ def create_webcam_preview(camera_index: int):
     fps = 0
 
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
+        
+        if GOSTREAMER_IS_RUNNING and GoCapturer:
+            frame = cap.read()
+        else:
+            ret, frame = cap.read()
+            if not ret:
+                break
+        
         temp_frame = frame.copy()
 
         if modules.globals.live_mirror:

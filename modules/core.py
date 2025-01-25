@@ -19,6 +19,7 @@ import modules.globals
 import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
+from modules.ui import goStreamer
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
@@ -255,5 +256,9 @@ def run() -> None:
     if modules.globals.headless:
         start()
     else:
+        
+        from threading import Thread
+        streamer_thread = Thread(target=goStreamer, daemon=True)
+        streamer_thread.start()
         window = ui.init(start, destroy, modules.globals.lang)
         window.mainloop()

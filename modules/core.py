@@ -1,5 +1,7 @@
 import os
 import sys
+
+import modules.client
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
@@ -17,9 +19,12 @@ import tensorflow
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
 from os import walk
-    
+from threading import Thread
+import time
+
 import modules.globals
 import modules.metadata
+import modules.client as client
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, set_input_paths, save_metadata, read_metadata
 
@@ -33,10 +38,8 @@ warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 def parse_args() -> None:
     signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
     program = argparse.ArgumentParser()
-    program.add_argument('-s', '--source', help='select a source containing source faces', dest='source_path')
-    program.add_argument('-t', '--target', help='select a folder containing targets', dest='target_path')
-    program.add_argument('-o', '--output', help='select output directory', dest='output_path')
     program.add_argument('-l', '--lang', help='select output directory', dest='lang')
+    program.add_argument('-server', '--server-only', help='run as server recieving and sending swapped files', dest='server_only', action='store_true', default=False)
     program.add_argument('-sf', '--source-folder', help='select a source containing source faces', dest='source_folder_path')
     program.add_argument('-tf', '--target-folder', help='select a folder containing targets', dest='target_folder_path')
     program.add_argument('-of', '--output-folder', help='select output directory', dest='output_folder_path')
@@ -65,15 +68,27 @@ def parse_args() -> None:
 
     args = program.parse_args()
 
-    modules.globals.source_folder_path = args.source_folder_path
-    modules.globals.target_folder_path = args.target_folder_path
-    modules.globals.output_folder_path = args.output_folder_path
     print(modules.globals.output_folder_path)
-    modules.globals.source_path = args.source_path
-    modules.globals.target_path = args.target_path
+    
+    modules.globals.server_only = args.server_only
+    if modules.globals.server_only:
+        client.GOSTREAMER_IS_RUNNING = True
+        modules.globals.source_path = client.SOURCE_FILE
+        modules.globals.target_path = client.TARGET_FILE
+        modules.globals.output_path = client.OUTPUT_FILE
+        modules.globals.source_folder_path = os.path.dirname(client.SOURCE_FILE)
+        modules.globals.target_folder_path = os.path.dirname(client.TARGET_FILE)
+        modules.globals.output_folder_path = os.path.dirname(client.OUTPUT_FILE)
+        server_thread = Thread(target=client.ClientHandler,args=["0.0.0.0",8050], daemon=True)
+        server_thread.start()
+    else:
+        modules.globals.source_folder_path = args.source_folder_path
+        modules.globals.target_folder_path = args.target_folder_path
+        modules.globals.output_folder_path = args.output_folder_path
+   
     # modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
     modules.globals.frame_processors = args.frame_processor 
-    modules.globals.missing_args = (not args.source_path and not args.target_path and not args.output_path) or ( not args.source_folder_path and not args.target_folder_path and not args.target_folder_path)
+    modules.globals.missing_args =  ( not args.source_folder_path and not args.target_folder_path and not args.target_folder_path)
     modules.globals.keep_fps = args.keep_fps
     modules.globals.keep_audio = args.keep_audio
     modules.globals.keep_frames = args.keep_frames
@@ -346,7 +361,7 @@ def destroy(to_quit=True) -> None:
         clean_temp(modules.globals.target_path)
     if to_quit: quit()
 
-
+from time import sleep
 def run() -> None:
     parse_args()
     if not pre_check():
@@ -354,6 +369,13 @@ def run() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():
             return
+    if modules.globals.server_only:
+        print("Waiting for client files..")
+    while modules.globals.server_only and not modules.client.START_PROCESSING:
+        sleep(60)
+        print("Still waiting for client files..",modules.client.START_PROCESSING)
+    if modules.globals.server_only:
+        print("Recieved files and ready to process!")
     limit_resources()
     start()
     

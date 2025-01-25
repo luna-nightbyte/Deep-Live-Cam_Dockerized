@@ -8,6 +8,7 @@ file_types = [
     ("Image", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp")),
     ("Video", ("*.mp4", "*.mkv")),
 ]
+server_only = False
 
 souce_target_map = []
 simple_map = {}

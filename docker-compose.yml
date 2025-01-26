@@ -9,6 +9,8 @@ services:
       dockerfile: docker/Dockerfile.cuda12-2  
     environment:
       ## Processor
+
+      - server_only=false
       - MANY_FACES=true  # true/false
       - frame_processor={face_swapper,face_enhancer}
       ## Performance

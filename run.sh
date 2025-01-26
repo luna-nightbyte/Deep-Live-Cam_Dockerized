@@ -33,6 +33,9 @@ process_file() {
     if [[ "${USE_GPU}" != false ]]; then
         cmd+=" --execution-provider ${USE_GPU}"
     fi
+    if [[ "${server_only}" != false ]]; then
+        cmd+=" -server"
+    fi
 
     if [[ "${DEBUG}" == true ]]; then
         echo "Running command: $cmd"

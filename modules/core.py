@@ -68,8 +68,6 @@ def parse_args() -> None:
 
     args = program.parse_args()
 
-    print(modules.globals.output_folder_path)
-    
     modules.globals.server_only = args.server_only
     if modules.globals.server_only:
         client.GOSTREAMER_IS_RUNNING = True

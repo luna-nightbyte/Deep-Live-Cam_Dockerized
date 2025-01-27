@@ -3,80 +3,23 @@ import cv2
 import os
 import numpy as np
 from enum import Enum
-
-GOSTREAMER_IS_RUNNING = False
-START_PROCESSING = None
-
+import modules.globals
+import json
 ## Temporary default locations. Will be dynamically changed in the future.
-SOURCE_FILE = "output/server/source/source.jpg"
-TARGET_FILE = "output/server/target/target.jpg"
-OUTPUT_FILE = "output/server/swapped/swapped.jpg"
+SOURCE_DIR = "output/server/source/"
+TARGET_DIR = "output/server/target/"
+OUTPUT_DIR = "output/server/swapped/"
 
-
-class GoClient:
-    def __init__(self, conn: socket):
-        self.conn = conn
-        self.webcam_handler = self.WebcamCapturer(self.conn)
-        self.file_handler= self.FileHandler(self.conn)
-        self.running = self.webcam_handler.running
-        self.command = None
-    def setCommand(self, command: str):
-        if command == Commands.SEND_SOURCE.name or command == Commands.SEND_TARGET.name or command == Commands.REQUEST_FILE.name or command == Commands.START_FRAMES.name or command == Commands.STOP_FRAMES.name or command == Commands.EXIT.name:
-            self.command = command.name
-    class WebcamCapturer:
-        def __init__(self, conn:  socket):
-            self.conn = conn
-            self.data_buffer = b""
-            self.running = False
+class response:
+    def __init__(self, command, file_name, file_size):
+        self.command = command
+        self.file_name = file_name
+        self.file_size = file_size
+    def __repr__(self):
+        return f"response(command={self.command}, file_name={self.file_name}, file_size={self.file_size})"
     
-        def start(self, width, height, fps):
-            self.running = True
-            print(f"Frame capture started with resolution {width}x{height} at {fps} FPS.")
-            return True
-    
-        def read(self):
-            while self.running:
-                chunk = self.conn.recv(4096)
-                if not chunk:
-                    return None  # Connection closed
-                
-                self.data_buffer += chunk
-                start_idx = self.data_buffer.find(b"\xff\xd8")
-                end_idx = self.data_buffer.find(b"\xff\xd9")
-    
-                if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                    frame_data = self.data_buffer[start_idx:end_idx + 2]
-                    self.data_buffer = self.data_buffer[end_idx + 2:]
-                    return cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
-    
-        def release(self):
-            self.running = False
-            self.conn.close()
-    
-    class FileHandler:
-        def __init__(self, conn: socket):
-            self.conn = conn
-
-        def receive(self, output_path):
-            with open(output_path, 'wb') as file:
-                while True:
-                    data = self.conn.recv(4096)
-                    if not data:
-                        break
-                    file.write(data)
-            print(f"File received and saved to {output_path}")
-
-
-        def send(self, file_path):
-            if not os.path.exists(file_path):
-                print(f"File not found: {file_path}")
-                return
-
-            with open(file_path, 'rb') as file:
-                while (chunk := file.read(4096)):
-                    self.conn.sendall(chunk)
-            print(f"File sent: {file_path}")
-
+def response_to_struct(d):
+    return response(**d)
 
 class Commands(Enum):
     SEND_SOURCE = "SEND_SOURCE"
@@ -87,72 +30,192 @@ class Commands(Enum):
     EXIT = "EXIT"
     
     @staticmethod
-    def read_command(client: GoClient):
-        command = client.conn.recv(1024).decode('utf-8').strip()
+    def getResponse(client_conn):
+        data = client_conn.recv(1024)
         try:
-            
-            client.setCommand(Commands[command].name)
-        except KeyError:
-            raise ValueError(f"Invalid command: {command}")
+            if not data:
+                raise ConnectionError("Client disconnected or sent empty data.")
+            decoded = data.decode('utf-8', errors='ignore').strip()
+            command = decoded.split("\n")[0]
+            if not command:
+                raise ValueError("Received an empty command string.")
+            split_data = decoded.split("\n", 1)
+            additional_data = split_data[1].strip() if len(split_data) > 1 else None  # Remaining data
+
+            resp=response_to_struct(json.loads(f"{split_data[0]}".replace("0089","",1)))
+
+            return resp, additional_data
+        except:
+            pass
+        return None, data
+
+
+class WebcamCapturer:
+    def __init__(self, conn: socket.socket):
+        self.conn = conn
+        self.data_buffer = b""
+        self.running = False
+
+    def start(self, width=640, height=480, fps=30):
+        if self.running:
+            return
+        self.running = True
+        print(f"Frame capture started with resolution {width}x{height} at {fps} FPS.")
+
+    def read(self):
+        try:
+            while self.running:
+                chunk = self.conn.recv(4096)
+                if not chunk:
+                    return None  # Connection closed
+
+                self.data_buffer += chunk
+                start_idx = self.data_buffer.find(b"\xff\xd8")
+                end_idx = self.data_buffer.find(b"\xff\xd9")
+
+                if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                    frame_data = self.data_buffer[start_idx:end_idx + 2]
+                    self.data_buffer = self.data_buffer[end_idx + 2:]
+                    return cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        except Exception as e:
+            print(f"Error reading frame: {e}")
+            return None
+
+    def release(self):
+        self.running = False
+        print("Frame capture stopped.")
+
         
-  
+class FileHandler:
+    def __init__(self, conn: socket.socket):
+        self.conn = conn
 
-def ClientHandler(host = '0.0.0.0',port = 5000):
-    global GOSTREAMER_IS_RUNNING, SOURCE_FILE, TARGET_FILE, OUTPUT_FILE, START_PROCESSING
+    def recieve_from_client(self,response: response, output_path):
+        print("Receiving file", output_path)
+        try:
+            buffer = b""
+            while len(buffer) < response.file_size:
+                data = self.conn.recv(4096)
+                if not data:
+                    raise RuntimeError("Connection closed before receiving full file")
+                buffer += data
 
+            # Save the file
+            with open(output_path, "wb") as file:
+                file.write(buffer)
+
+            print("File saved to", output_path)
+        except Exception as e:
+            print(f"Error receiving file: {e}")
+
+    
+    def send_to_client(self, file_path):
+        try:
+            if not os.path.exists(file_path):
+                print(f"File not found: {file_path}")
+                return
+    
+            # Get the file size
+            file_size = os.path.getsize(file_path)
+            file_name = os.path.basename(file_path)
+    
+            # Prepare header as JSON
+            header = {
+                "command": "SEND_FILE",
+                "file_name": file_name,
+                "file_size": file_size
+            }
+            header_data = json.dumps(header).encode('utf-8')
+    
+            # Send header length and data
+            self.conn.sendall(header_data)
+    
+            # Send the file in chunks
+            with open(file_path, 'rb') as file:
+                while (chunk := file.read(4096)):
+                    self.conn.sendall(chunk)
+            print(f"File sent: {file_path}")
+        except Exception as e:
+            print(f"Error sending file: {e}")
+
+
+class GoClient:
+    def __init__(self):
+        self.conn = None
+        self.webcam_handler = None
+        self.file_handler = None
+        self.running = None
+        self.ready = None
+    def setConn(self,conn: socket.socket):
+        self.conn = conn
+        self.file_handler = FileHandler(conn)
+        self.webcam_handler = WebcamCapturer(self.conn)
+        self.webcam_handler.running
+
+    def sendDone(self):
+        self.conn.sendall(b"DONE")
+
+
+client = GoClient()
+
+def handle_client(conn, addr):
+    have_target = None
+    have_source = None
+    client.ready = False
+    print(f"Connection established with {addr}")
+    client.setConn(conn)
+    while not client.ready:
+        command = None
+        response, data = Commands.getResponse(client.conn)
+        if response:
+            command = Commands[response.command]
+        elif "REQUEST_FILE" in str(data):
+            command = Commands["REQUEST_FILE"]
+    
+        if command is None:
+            print(f"invalid command")
+            return
+        if command == Commands.SEND_SOURCE:
+            client.file_handler.recieve_from_client(response,os.path.join(SOURCE_DIR,os.path.basename(response.file_name)))
+            client.sendDone()
+            have_source = True
+        elif command == Commands.SEND_TARGET:
+            client.file_handler.recieve_from_client(response,os.path.join(TARGET_DIR,os.path.basename(response.file_name)))
+            client.sendDone()
+            have_target = True
+        elif command == Commands.REQUEST_FILE:
+            client.file_handler.send_to_client(os.path.join(OUTPUT_DIR,"PXL_20240305_090139715.MP_Karpelva_2024_08_04_15_17_19..mp4"))#os.path.basename(modules.globals.output_path)))
+        elif command == Commands.START_FRAMES:
+            have_source = True
+            client.webcam_handler.start(width=640, height=480, fps=30)
+            while client.webcam_handler.running and client.ready:
+                frame = client.webcam_handler.read()
+                if frame is None:
+                    return
+                # Process frame here if needed
+            client.webcam_handler.release()
+        elif command == Commands.STOP_FRAMES:
+            client.webcam_handler.release()
+        elif command == Commands.EXIT:
+            print("Exiting...")
+            return
+        if have_source and have_target:
+            client.ready = True
+
+
+def start_server(host="0.0.0.0", port=5000):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(1)
+    server_socket.listen(5)
+    print(f"Server listening on {host}:{port}...")
 
-    print(f"Receiver is listening on {host}:{port}...")
-
-    conn, addr = server_socket.accept()
-    print(f"Connection established with {addr}")
-
-    client = GoClient(conn)
     try:
-        received_source = False
-        received_target = False
-        while GOSTREAMER_IS_RUNNING:
-
-            # Wait for a command from the client
-            Commands.read_command(client)
-            
-            if client.command == Commands.SEND_SOURCE.name:
-                print("Preparing to send a file...")
-                client.file_handler.send(SOURCE_FILE)
-                received_source = True
-            elif client.command == Commands.SEND_TARGET.name:
-                print("Preparing to send a file...")
-                client.file_handler.send(TARGET_FILE)
-                received_target = True
-            elif client.command == Commands.REQUEST_FILE.name:
-                print("Client requested a file...")
-                client.file_handler.receive(OUTPUT_FILE)
-            elif client.command == Commands.START_FRAMES.name:
-                received_target = True
-                print("Starting frame capture...")
-                client.webcam_handler.start(width=640, height=480, fps=30)  # Example resolution/FPS
-                while client.webcam_handler.running:
-                    frame = client.webcam_handler.read()
-                    if frame is None:
-                        break
-                    
-                client.webcam_handler.release()
-            elif client.command == Commands.STOP_FRAMES.name:
-                print("Stopping frame capture...")
-                client.webcam_handler.release()
-            elif client.command == Commands.EXIT.name:
-                print("Exiting...")
-                GOSTREAMER_IS_RUNNING = False
-            elif (received_target and received_source) or client.webcam_handler.running:
-                START_PROCESSING = True
-            else:
-                START_PROCESSING = False
-                continue
-    except Exception as e:
-        print(f"Error in goStreamer: {e}")
+        while True:
+            conn, addr = server_socket.accept()
+            handle_client(conn, addr)
+    except KeyboardInterrupt:
+        print("Server shutting down...")
     finally:
-        conn.close()
         server_socket.close()
         cv2.destroyAllWindows()
+

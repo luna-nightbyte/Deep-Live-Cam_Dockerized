@@ -70,14 +70,10 @@ def parse_args() -> None:
 
     modules.globals.server_only = args.server_only
     if modules.globals.server_only:
-        client.GOSTREAMER_IS_RUNNING = True
-        modules.globals.source_path = client.SOURCE_FILE
-        modules.globals.target_path = client.TARGET_FILE
-        modules.globals.output_path = client.OUTPUT_FILE
-        modules.globals.source_folder_path = os.path.dirname(client.SOURCE_FILE)
-        modules.globals.target_folder_path = os.path.dirname(client.TARGET_FILE)
-        modules.globals.output_folder_path = os.path.dirname(client.OUTPUT_FILE)
-        server_thread = Thread(target=client.ClientHandler,args=["0.0.0.0",8050], daemon=True)
+        modules.globals.source_folder_path = client.SOURCE_DIR
+        modules.globals.target_folder_path = client.TARGET_DIR
+        modules.globals.output_folder_path = client.OUTPUT_DIR
+        server_thread = Thread(target=client.start_server,args=["0.0.0.0",8050], daemon=True)
         server_thread.start()
     else:
         modules.globals.source_folder_path = args.source_folder_path
@@ -369,9 +365,9 @@ def run() -> None:
             return
     if modules.globals.server_only:
         print("Waiting for client files..")
-    while modules.globals.server_only and not modules.client.START_PROCESSING:
+    while modules.globals.server_only and not modules.client.client.ready:
         sleep(60)
-        print("Still waiting for client files..",modules.client.START_PROCESSING)
+        print("Still waiting for client files..",modules.client.client.ready)
     if modules.globals.server_only:
         print("Recieved files and ready to process!")
     limit_resources()

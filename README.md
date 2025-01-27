@@ -14,7 +14,7 @@ Modify [`.env`](https://github.com/luna-nightbyte/Deep-Batch-Swapper/blob/main/e
 
 Use [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow/tree/775c03f39803ede76b54f68592aa8d3674ac097b) to send and recieve files (or webcam frames).
 
-### Server only
+### Server only (Not fully implemented. Expect bugs)
 If you want to run a "server side" container, set `SERVER_ONL=true` in the `.env` file. A client with 
 
 ### .env

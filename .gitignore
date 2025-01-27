@@ -11,6 +11,8 @@ tf_env/
 *.mp4
 *.mkv
 
+.env
+
 .tmp/
 temp/
 .venv/

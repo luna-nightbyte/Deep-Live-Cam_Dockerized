@@ -1,48 +1,26 @@
+version: '3.8'
 
 services:
   Deep-Batch-Swapper:
-    container_name: batch-faceswap
-    image: docker.io/avgradmin/deep-swap:v0.1.2-cuda-12.2
+    container_name: ${CONTAINER_NAME}
+    image: ${IMAGE_NAME}
     build:
       context: .
-      dockerfile: docker/Dockerfile.cuda12-2  
+      dockerfile: ${DOCKERFILE_PATH}
     ports:
-      - "8050:8050"
+      - "${PORT}:${CONTAINER_PORT}"
     environment:
-      ## Processor
-
-      - server_only=false
-      - MANY_FACES=true  # true/false
-      - frame_processor={face_swapper,face_enhancer}
-      ## Performance
-      - max_mem=16
-      - threads=4
-      - video_encoder=libx265
-      - keep_fps=true
-      - keep_audio=true
-      - also_enhance_face=true
-      - USE_GPU=cuda  # Change to cuda or whatever you need to use. 'false' disables.
-      ## Video
-      - USE_VIDEO_ARGS=false  # true/false
-      - video_quality=0
-
-      - NVIDIA_VISIBLE_DEVICES=1 
-      # Display
-      - DISPLAY=$DISPLAY
+      # System environments
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
     volumes:
-    # Change according to your setup
-      - ./:/app
-      # Do not change below volumes
-      - ./run.sh:/app/docker_script.sh
-      - ./models/.insightface:/root/.insightface
-      - ./models/.insightface:/app/.insightface
-      - ./models/gfpgan:/app/gfpgan
-      - ./models:/app/models
-      - ./output:/app/output
-
-
-      # Display
-      - /tmp/.X11-unix:/tmp/.X11-unix 
+      - ${APP_DIR}:/app
+      - ${STARTUP_SCRIPT}:/app/docker_script.sh
+      - ${MODELS_DIR}/.insightface:/root/.insightface
+      - ${MODELS_DIR}/.insightface:/app/.insightface
+      - ${MODELS_DIR}/gfpgan:/app/gfpgan
+      - ${MODELS_DIR}:/app/models
+      - ${OUTPUT_DIR}:/app/output
+      - /tmp/.X11-unix:/tmp/.X11-unix
       - /dev/video0:/dev/video0
       - /dev/video1:/dev/video1
     deploy:
@@ -50,10 +28,9 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: ${GPU_COUNT}
               capabilities: [gpu]
     tty: true
-    privileged: true # Need for webcam
+    privileged: true
     runtime: nvidia
     command: [ "/bin/bash", "/app/docker_script.sh" ]
-  

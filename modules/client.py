@@ -184,7 +184,7 @@ def handle_client(conn, addr):
             client.sendDone()
             have_target = True
         elif command == Commands.REQUEST_FILE:
-            client.file_handler.send_to_client(os.path.join(OUTPUT_DIR,"PXL_20240305_090139715.MP_Karpelva_2024_08_04_15_17_19..mp4"))#os.path.basename(modules.globals.output_path)))
+            client.file_handler.send_to_client(os.path.join(OUTPUT_DIR,os.path.basename(modules.globals.output_path)))
         elif command == Commands.START_FRAMES:
             have_source = True
             client.webcam_handler.start(width=640, height=480, fps=30)

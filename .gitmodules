@@ -1,6 +1,3 @@
-[submodule "goStreamer"]
-	path = goStreamer
-	url = https://github.com/luna-nightbyte/goStreamer
 [submodule "GoMediaFlow"]
 	path = GoMediaFlow
 	url = https://github.com/luna-nightbyte/GoMediaFlow

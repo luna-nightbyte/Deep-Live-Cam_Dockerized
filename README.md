@@ -4,7 +4,7 @@
   
   This uses batch processing with folders as inputs insted of single files.
 Simply put one file of each inside the input dirs to only process one file.
-  Deepfaken face swap videos and images with a single click using docker container.
+  Deepfake face swap videos and images with a single click using docker container.
 ## Startup
 
 Simple start the docker container with you input/output folders ready and wait for the process to finish. 

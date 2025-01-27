@@ -65,10 +65,16 @@ IMAGE_NAME=docker.io/avgradmin/deep-swap:v0.1.2-cuda-12.2
 DOCKERFILE_PATH=docker/Dockerfile.cuda12-2
 ```
 
+## Issues & Milestones
+Project milestones and issues can be tracked in the [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow) issues and [Milestones](https://github.com/luna-nightbyte/GoMediaFlow/milestone) tabs.
+
 ## Credits
 Thanks to the original autors and contributurs of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) for maintaining the original repo. 
 
 And a thanks to the author of the initial `docker-compose.yml` and `Dockerfile` used in this project. (see [DeepLiveCam](https://github.com/AVGRadmin/DeepLiveCam))
+
+
+
 
 # Original readme:
 

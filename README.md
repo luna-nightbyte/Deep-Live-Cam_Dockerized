@@ -1,11 +1,68 @@
-<h1 align="center">Deep-Batch-Swapper</h1>
+# Deep-Batch-Swapper
 
   This is a CLI version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
   
   This uses batch processing with folders as inputs (single files are probably supported, but not tested since files can just be put into a folder.).
   Deepfaken face swap videos and images with a single click using docker container.
+## Startup
 
-Modify docker-compose, input dirs in `run.sh` and start the container.
+Simple start the docker container with you input/output folders ready and wait for the process to finish. 
+
+## Settings
+
+Modify [`.env`](https://github.com/luna-nightbyte/Deep-Batch-Swapper/blob/main/example.env) with the settings best for your use and start the container.
+
+Use [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow/tree/775c03f39803ede76b54f68592aa8d3674ac097b) to send and recieve files (or webcam frames).
+
+### Server only (Not fully implemented. Expect bugs)
+If you want to run a "server side" container, set `SERVER_ONL=true` in the `.env` file. A client with 
+
+### .env
+```env
+# Directories
+APP_DIR=./
+STARTUP_SCRIPT=./run.sh
+MODELS_DIR=./models
+OUTPUT_DIR=./output
+
+SOURCE_FOLDER=/app/output/source
+TARGET_FOLDER=/app/output/target
+OUTPUT_FOLDER=/app/output/output
+
+# Ports
+PORT=8050  #Externally used by the host machine (whichs would need to be accepted by the firewall)
+CONTAINER_PORT=8050 #Internally used by the container application
+
+# Processor Settings
+SERVER_ONLY=false # If true, the container will wait for files to be sent from https://github.com/luna-nightbyte/GoMediaFlow
+MANY_FACES=true
+FRAME_PROCESSOR=face_swapper,face_enhancer
+
+# Performance Settings
+MAX_MEM=16
+THREADS=4
+KEEP_AUDIO=true
+ALSO_ENHANCE_FACE=true
+
+# Video Settings
+USE_VIDEO_ARGS=false
+VIDEO_QUALITY=0
+VIDEO_ENCODER=libx265
+KEEP_FPS=true
+
+# GPU
+USE_GPU=true
+RUNTIME=cuda
+GPU_COUNT=1
+
+# System Environment
+NVIDIA_VISIBLE_DEVICES=1
+
+# Container Settings
+CONTAINER_NAME=batch-faceswap
+IMAGE_NAME=docker.io/avgradmin/deep-swap:v0.1.2-cuda-12.2
+DOCKERFILE_PATH=docker/Dockerfile.cuda12-2
+```
 
 
 

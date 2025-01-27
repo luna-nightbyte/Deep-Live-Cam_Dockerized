@@ -7,6 +7,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.cuda12-2  
+    ports:
+      - "8050:8050"
     environment:
       ## Processor
 

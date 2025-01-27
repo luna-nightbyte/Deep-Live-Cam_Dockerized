@@ -2,7 +2,8 @@
 
   This is a CLI version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
   
-  This uses batch processing with folders as inputs (single files are probably supported, but not tested since files can just be put into a folder.).
+  This uses batch processing with folders as inputs insted of single files.
+Simply put one file of each inside the input dirs to only process one file.
   Deepfaken face swap videos and images with a single click using docker container.
 ## Startup
 

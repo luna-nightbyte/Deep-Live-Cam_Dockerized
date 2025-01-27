@@ -12,8 +12,10 @@ Simple start the docker container with you input/output folders ready and wait f
 
 Modify [`.env`](https://github.com/luna-nightbyte/Deep-Batch-Swapper/blob/main/example.env) with the settings best for your use and start the container.
 
+Use [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow/tree/775c03f39803ede76b54f68592aa8d3674ac097b) to send and recieve files (or webcam frames).
+
 ### Server only
-If you want to run a "server side" container, set `SERVER_ONL=true` in the `.env` file.
+If you want to run a "server side" container, set `SERVER_ONL=true` in the `.env` file. A client with 
 
 ### .env
 ```env

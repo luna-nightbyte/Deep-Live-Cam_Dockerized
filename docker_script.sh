@@ -45,5 +45,3 @@ if [[ $? -ne 0 ]]; then
     echo "Error: Command failed for file: $source_file"
     exit 1
 fi
-
-

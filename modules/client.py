@@ -7,7 +7,10 @@ import modules.globals
 import json
 from time import sleep
 
-    
+DEFAULT_SOURCE_FOLDER="output/source"
+DEFAULT_TARGET_FOLDER="output/target"
+DEFAULT_OUTPUT_FOLDER="output/swapped"
+
 class CloudServer:
         
     class WebcamCapturer:

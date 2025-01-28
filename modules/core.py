@@ -70,9 +70,9 @@ def parse_args() -> None:
 
     modules.globals.server_only = args.server_only
     if modules.globals.server_only:
-        modules.globals.source_folder_path = client.SOURCE_DIR
-        modules.globals.target_folder_path = client.TARGET_DIR
-        modules.globals.output_folder_path = client.OUTPUT_DIR
+        modules.globals.source_folder_path = client.DEFAULT_SOURCE_FOLDER
+        modules.globals.target_folder_path = client.DEFAULT_TARGET_FOLDER
+        modules.globals.output_folder_path = client.DEFAULT_OUTPUT_FOLDER
         server_thread = Thread(target=client.start_server,args=["0.0.0.0",8050], daemon=True)
         server_thread.start()
     else:
@@ -360,14 +360,13 @@ def run() -> None:
     parse_args()
     if not pre_check():
         return
+    
+    client.wait_for_ready_signal()
+
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():
             return
-    if modules.globals.server_only:
-        print("Waiting for client files..")
-    while modules.globals.server_only and not modules.client.client.ready:
-        sleep(60)
-        print("Still waiting for client files..",modules.client.client.ready)
+    
     if modules.globals.server_only:
         print("Recieved files and ready to process!")
     limit_resources()

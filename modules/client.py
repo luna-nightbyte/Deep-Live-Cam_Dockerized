@@ -221,7 +221,7 @@ def handle_client(conn, addr) -> bool:
                     server.have_source = True
 
             elif command == Commands.REQUEST_FILE:
-                ok = server.file_handler.send_to_client(os.path.join(resolve_dir(modules.globals.output_path),os.path.basename(response.file_name)))
+                server.file_handler.send_to_client(os.path.join(resolve_dir(modules.globals.output_path),os.path.basename(response.file_name)))
             elif command == Commands.START_FRAMES:
                 server.have_source = True
                 server.webcam_handler.start(width=640, height=480, fps=30)

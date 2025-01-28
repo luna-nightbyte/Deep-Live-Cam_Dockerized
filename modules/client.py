@@ -90,23 +90,30 @@ class FileHandler:
     def __init__(self, conn: socket.socket):
         self.conn = conn
 
-    def recieve_from_client(self,response: response, output_path):
+    
+
+    def recieve_from_client(self,size, output_path):
         print("Receiving file", output_path)
         try:
             buffer = b""
-            while len(buffer) < response.file_size:
+            while len(buffer) < size:
                 data = self.conn.recv(4096)
                 if not data:
                     raise RuntimeError("Connection closed before receiving full file")
                 buffer += data
 
             # Save the file
+            folder_path = os.path.dirname(output_path)
+            os.makedirs(folder_path, exist_ok=True)
             with open(output_path, "wb") as file:
                 file.write(buffer)
 
             print("File saved to", output_path)
+            return True
         except Exception as e:
             print(f"Error receiving file: {e}")
+            return False
+            
 
     
     def send_to_client(self, file_path):
@@ -172,6 +179,7 @@ class GoClient:
 
 client = GoClient()
 
+
 def handle_client(conn, addr):
     have_target = None
     have_source = None
@@ -190,13 +198,18 @@ def handle_client(conn, addr):
             print(f"invalid command")
             return
         if command == Commands.SEND_SOURCE:
-            client.file_handler.recieve_from_client(response,os.path.join(SOURCE_DIR,os.path.basename(response.file_name)))
-            client.sendDone()
-            have_source = True
+            ok = client.request_file(response.file_size, os.path.join(SOURCE_DIR,os.path.basename(response.file_name)))
+            if not ok:
+                print("Error receiving source file!")
+            else:
+                have_source = True
         elif command == Commands.SEND_TARGET:
-            client.file_handler.recieve_from_client(response,os.path.join(TARGET_DIR,os.path.basename(response.file_name)))
-            client.sendDone()
-            have_target = True
+            ok = client.request_file(response.file_size, os.path.join(TARGET_DIR,os.path.basename(response.file_name)))
+            if not ok:
+                print("Error receiving target file!")
+            else:
+                have_source = True
+
         elif command == Commands.REQUEST_FILE:
             client.file_handler.send_to_client(os.path.join(OUTPUT_DIR,os.path.basename(modules.globals.output_path)))
         elif command == Commands.START_FRAMES:

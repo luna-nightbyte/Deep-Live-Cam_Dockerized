@@ -208,20 +208,20 @@ def handle_client(conn, addr) -> bool:
                 print(f"invalid command")
                 continue
             if command == Commands.SEND_SOURCE:
-                ok = server.request_file(response.file_size, os.path.join(os.path.dirname(modules.globals.source_path),os.path.basename(response.file_name)))
+                ok = server.request_file(response.file_size, os.path.join(resolve_dir(modules.globals.source_path),os.path.basename(response.file_name)))
                 if not ok:
                     print("Error receiving source file!")
                 else:
                     server.have_source = True
             elif command == Commands.SEND_TARGET:
-                ok = server.request_file(response.file_size, os.path.join(os.path.dirname(modules.globals.target_path),os.path.basename(response.file_name)))
+                ok = server.request_file(response.file_size, os.path.join(resolve_dir(modules.globals.target_path),os.path.basename(response.file_name)))
                 if not ok:
                     print("Error receiving target file!")
                 else:
                     server.have_source = True
 
             elif command == Commands.REQUEST_FILE:
-                ok = server.request_file(response.file_size, os.path.join(os.path.dirname(modules.globals.output_path),os.path.basename(response.file_name)))
+                ok = server.request_file(response.file_size, os.path.join(resolve_dir(modules.globals.output_path),os.path.basename(response.file_name)))
             elif command == Commands.START_FRAMES:
                 server.have_source = True
                 server.webcam_handler.start(width=640, height=480, fps=30)
@@ -281,4 +281,9 @@ def wait_for_ready_signal():
     while modules.globals.server_only and not server.ready:
         sleep(60)
         print("Still waiting for client files..")
-        
+
+def resolve_dir(path: str):
+    if os.path.isdir(path):
+        return path
+    else:
+        return os.path.dirname(path)

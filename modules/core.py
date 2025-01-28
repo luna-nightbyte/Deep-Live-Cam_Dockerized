@@ -73,6 +73,9 @@ def parse_args() -> None:
         modules.globals.source_folder_path = client.DEFAULT_SOURCE_FOLDER
         modules.globals.target_folder_path = client.DEFAULT_TARGET_FOLDER
         modules.globals.output_folder_path = client.DEFAULT_OUTPUT_FOLDER
+        modules.globals.source_path = client.DEFAULT_SOURCE_FOLDER
+        modules.globals.target_path = client.DEFAULT_TARGET_FOLDER
+        modules.globals.output_path = client.DEFAULT_OUTPUT_FOLDER
         server_thread = Thread(target=client.start_server,args=["0.0.0.0",8050], daemon=True)
         server_thread.start()
     else:

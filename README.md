@@ -1,5 +1,6 @@
 # Deep-Live-Cam-Cloud (In development)
 ## Modificationss
+  - All adjustable settings moved to `.env`. See [`example.env`](https://github.com/luna-nightbyte/Deep-Live-Cam_Dockerized-CloudServer/blob/main/example.env)
   - Dockerized
   - This is a CLI (no UI) version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
   - Uses batch processing with folders as inputs insted of single files.

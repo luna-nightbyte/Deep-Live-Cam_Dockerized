@@ -1,13 +1,21 @@
-# Deep-Batch-Swapper
+# Deep-Live-Cam-Cloud (In development)
+## Modificationss
+  - Dockerized
+  - This is a CLI (no UI) version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
+  - Uses batch processing with folders as inputs insted of single files.
+    - How to process just one file?: Simply put one file of each inside the input dirs to only process one file.
+  - In development:
+      - Cloud server
+      - Client side connection [app](https://github.com/luna-nightbyte/GoMediaFlow)
+## Issues & Milestones
+Project milestones and issues can be tracked in the [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow) issues and [Milestones](https://github.com/luna-nightbyte/GoMediaFlow/milestones) tabs.
 
-  This is a CLI version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
-  
-  This uses batch processing with folders as inputs insted of single files.
-Simply put one file of each inside the input dirs to only process one file.
-  Deepfake face swap videos and images with a single click using docker container.
 ## Startup
 
 Simple start the docker container with you input/output folders ready and wait for the process to finish. 
+```
+docker compose up
+```
 
 ## Settings
 
@@ -65,8 +73,6 @@ IMAGE_NAME=docker.io/avgradmin/deep-swap:v0.1.2-cuda-12.2
 DOCKERFILE_PATH=docker/Dockerfile.cuda12-2
 ```
 
-## Issues & Milestones
-Project milestones and issues can be tracked in the [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow) issues and [Milestones](https://github.com/luna-nightbyte/GoMediaFlow/milestone) tabs.
 
 ## Credits
 Thanks to the original autors and contributurs of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) for maintaining the original repo. 

@@ -1,7 +1,7 @@
 import os
 import sys
 
-import modules.client
+import modules.cloud
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
@@ -24,7 +24,7 @@ import time
 
 import modules.globals
 import modules.metadata
-import modules.client as client
+import modules.cloud as cloud
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, set_input_paths, save_metadata, read_metadata
 
@@ -70,13 +70,13 @@ def parse_args() -> None:
 
     modules.globals.server_only = args.server_only
     if modules.globals.server_only:
-        modules.globals.source_folder_path = client.DEFAULT_SOURCE_FOLDER
-        modules.globals.target_folder_path = client.DEFAULT_TARGET_FOLDER
-        modules.globals.output_folder_path = client.DEFAULT_OUTPUT_FOLDER
-        modules.globals.source_path = client.DEFAULT_SOURCE_FOLDER
-        modules.globals.target_path = client.DEFAULT_TARGET_FOLDER
-        modules.globals.output_path = client.DEFAULT_OUTPUT_FOLDER
-        server_thread = Thread(target=client.start_server,args=["0.0.0.0",8050], daemon=True)
+        modules.globals.source_folder_path = cloud.DEFAULT_SOURCE_FOLDER
+        modules.globals.target_folder_path = cloud.DEFAULT_TARGET_FOLDER
+        modules.globals.output_folder_path = cloud.DEFAULT_OUTPUT_FOLDER
+        modules.globals.source_path = cloud.DEFAULT_SOURCE_FOLDER
+        modules.globals.target_path = cloud.DEFAULT_TARGET_FOLDER
+        modules.globals.output_path = cloud.DEFAULT_OUTPUT_FOLDER
+        server_thread = Thread(target=cloud.start_listener,args=["0.0.0.0",8050], daemon=True)
         server_thread.start()
     else:
         modules.globals.source_folder_path = args.source_folder_path
@@ -364,7 +364,7 @@ def run() -> None:
     if not pre_check():
         return
     
-    client.wait_for_ready_signal()
+    cloud.wait_for_ready_signal()
 
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():

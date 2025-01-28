@@ -152,8 +152,22 @@ class GoClient:
         self.webcam_handler = WebcamCapturer(self.conn)
         self.webcam_handler.running
 
-    def sendDone(self):
-        self.conn.sendall(b"DONE")
+    def sendMsg(self, msg: str):
+        self.conn.sendall(msg.encode('utf-8'))
+    def request_file(self,size, file_path):
+        count = 0
+        ok = False
+        while not ok:
+            ok = self.file_handler.recieve_from_client(size, file_path)
+            if not ok:
+                print("Error receiving source file. Retrying...")
+                self.sendMsg("RETRY")
+                count += 1
+            if count > 3:
+                print("Failed to receive source file after 3 attempts. Exiting...")
+                break
+        self.sendMsg("DONE")
+        return ok
 
 
 client = GoClient()

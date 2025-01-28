@@ -149,12 +149,14 @@ class CloudServer:
         self.have_target = False
 
     class response:
-        def __init__(self, command, file_name, file_size):
+        def __init__(self, client_ip, client_port, command: str, file_name: str, file_size: int):
+            self.client_ip = client_ip
+            self.client_port = client_port
             self.command = command
             self.file_name = file_name
             self.file_size = file_size
         def __repr__(self):
-            return f"response(command={self.command}, file_name={self.file_name}, file_size={self.file_size})"
+            return f"response(client_ip={self.client_ip}, client_port={self.client_port}, command={self.command}, file_name={self.file_name}, file_size={self.file_size})"
     
     def response_to_struct(self,d):
         return self.response(**d)
@@ -243,7 +245,7 @@ def handle_client(conn, addr) -> bool:
             print("Server stopping")
             return False
 
-def start_server(host="0.0.0.0", port=5000):
+def start_listener(host="0.0.0.0", port=5000):
     run = True
     closed = False
     while run:

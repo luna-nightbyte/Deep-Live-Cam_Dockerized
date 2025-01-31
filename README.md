@@ -1,49 +1,52 @@
-# Deep-Live-Cam-Cloud (In development)
-## Modificationss
-  - Dockerized
-  - This is a CLI (no UI) version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
-  - Uses batch processing with folders as inputs insted of single files.
-    - How to process just one file?: Simply put one file of each inside the input dirs to only process one file.
-  - In development:
-      - Cloud server
-      - Client side connection [app](https://github.com/luna-nightbyte/GoMediaFlow)
+# Deep-Live-Cam-Cloud (In Development)
+
+## Overview
+This project is a Dockerized, CLI-based version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam), optimized for batch processing and cloud deployment. It supports:
+- Batch processing using folders instead of single files.
+- Cloud server functionality (in early development).
+- Client-side connections via [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow).
+
+## Modifications
+- All adjustable settings moved to `.env`. See [`example.env`](https://github.com/luna-nightbyte/Deep-Live-Cam_Dockerized-CloudServer/blob/main/example.env).
+- Dockerized for easier deployment.
+- CLI-only (no UI).
+- Uses batch processing with folders as inputs.
+  - To process a single file, place just one file in each input directory.
+
 ## Issues & Milestones
-Project milestones and issues can be tracked in the [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow) issues and [Milestones](https://github.com/luna-nightbyte/GoMediaFlow/milestones) tabs.
+Track milestones and issues in the [GoMediaFlow repository](https://github.com/luna-nightbyte/GoMediaFlow) under [Issues](https://github.com/luna-nightbyte/GoMediaFlow/issues) and [Milestones](https://github.com/luna-nightbyte/GoMediaFlow/milestones).
 
 ## Startup
-
-Simple start the docker container with you input/output folders ready and wait for the process to finish. 
-```
+Ensure your input and output folders are ready, then start the Docker container:
+```sh
 docker compose up
 ```
 
 ## Settings
+Modify [`.env`](https://github.com/luna-nightbyte/Deep-Batch-Swapper/blob/main/example.env) to customize the settings:
 
-Modify [`.env`](https://github.com/luna-nightbyte/Deep-Batch-Swapper/blob/main/example.env) with the settings best for your use and start the container.
+- Use [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow/tree/775c03f39803ede76b54f68592aa8d3674ac097b) to send and receive files (or webcam frames).
 
-Use [GoMediaFlow](https://github.com/luna-nightbyte/GoMediaFlow/tree/775c03f39803ede76b54f68592aa8d3674ac097b) to send and recieve files (or webcam frames).
+### Server Mode (Experimental)
+To run a server-only container, set `SERVER_ONLY=true` in `.env`. A compatible client is required.
 
-### Server only (Not fully implemented. Expect bugs)
-If you want to run a "server side" container, set `SERVER_ONL=true` in the `.env` file. A client with 
-
-### .env
+### Example `.env` File
 ```env
 # Directories
 APP_DIR=./
 STARTUP_SCRIPT=./run.sh
 MODELS_DIR=./models
 OUTPUT_DIR=./output
-
 SOURCE_FOLDER=/app/output/source
 TARGET_FOLDER=/app/output/target
 OUTPUT_FOLDER=/app/output/output
 
 # Ports
-PORT=8050  #Externally used by the host machine (whichs would need to be accepted by the firewall)
-CONTAINER_PORT=8050 #Internally used by the container application
+PORT=8050  # Externally used by the host machine
+CONTAINER_PORT=8050  # Internally used by the container
 
 # Processor Settings
-SERVER_ONLY=false # If true, the container will wait for files to be sent from https://github.com/luna-nightbyte/GoMediaFlow
+SERVER_ONLY=false  # If true, the container waits for files from GoMediaFlow
 MANY_FACES=true
 FRAME_PROCESSOR=face_swapper,face_enhancer
 
@@ -58,12 +61,10 @@ VIDEO_QUALITY=0
 VIDEO_ENCODER=libx265
 KEEP_FPS=true
 
-# GPU
+# GPU Settings
 USE_GPU=true
 RUNTIME=cuda
 GPU_COUNT=1
-
-# System Environment
 NVIDIA_VISIBLE_DEVICES=1
 
 # Container Settings
@@ -72,14 +73,9 @@ IMAGE_NAME=docker.io/avgradmin/deep-swap:v0.1.2-cuda-12.2
 DOCKERFILE_PATH=docker/Dockerfile.cuda12-2
 ```
 
-
 ## Credits
-Thanks to the original autors and contributurs of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) for maintaining the original repo. 
-
-And a thanks to the author of the initial `docker-compose.yml` and `Dockerfile` used in this project. (see [DeepLiveCam](https://github.com/AVGRadmin/DeepLiveCam))
-
-
-
+Special thanks to the original authors and contributors of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
+Additionally, thanks to the creator of the initial `docker-compose.yml` and `Dockerfile` used in this project ([DeepLiveCam](https://github.com/AVGRadmin/DeepLiveCam)).
 
 # Original readme:
 

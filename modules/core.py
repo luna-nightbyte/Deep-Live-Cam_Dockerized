@@ -26,7 +26,7 @@ import modules.globals
 import modules.metadata
 import modules.cloud as cloud
 from modules.processors.frame.core import get_frame_processors_modules
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, set_input_paths, save_metadata, read_metadata
+from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, create_temp, move_temp, clean_temp, normalize_output_path, set_input_paths, save_metadata, read_metadata
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -219,7 +219,7 @@ def process_video_files(processedFiles, source_file, target_file, ext_types):
         if not modules.globals.map_faces:
             update_status('Creating temp resources...')
             create_temp(modules.globals.target_path)
-            update_status('Extracting frames...')
+            update_status('Extracting frames and audio...')
             extract_frames(modules.globals.target_path)
 
         temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
@@ -232,11 +232,12 @@ def process_video_files(processedFiles, source_file, target_file, ext_types):
         update_status(f'Creating video with {fps} fps...')
         create_video(modules.globals.target_path, fps)
         # handle audio
-        update_status('Restoring audio..')
-        restore_audio(modules.globals.target_path, modules.globals.output_path)
+        # update_status('Restoring audio..')
+        # restore_audio(modules.globals.target_path, modules.globals.output_path)
+ 
         move_temp(modules.globals.target_path, modules.globals.output_path)
         # clean and validate
-        clean_temp(modules.globals.target_path)
+        # clean_temp(modules.globals.target_path)
         if is_video(modules.globals.target_path):
             update_status('Processing to video succeed!') 
         else:

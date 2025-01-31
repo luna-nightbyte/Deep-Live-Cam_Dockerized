@@ -32,7 +32,8 @@ def run_ffmpeg(args: List[str]) -> bool:
     ]
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        # print(output.decode("utf-8"))  # Debug printout
         return True
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg error:\n{e.output.decode('utf-8')}")
@@ -55,6 +56,11 @@ def detect_fps(target_path: str) -> float:
 
 def extract_frames(target_path: str) -> None:
     temp_directory_path = get_temp_directory_path(target_path)
+    temp_audio_path = os.path.join(
+        temp_directory_path, 
+        os.path.splitext(os.path.basename(target_path))[0] + ".aac"
+    )
+    extract_audio(target_path,temp_audio_path)
     run_ffmpeg(
         [
             "-i",
@@ -66,49 +72,50 @@ def extract_frames(target_path: str) -> None:
     )
 
 
-def create_video(target_path: str, fps: float = 30.0) -> None:
+def extract_audio(video_path: str, audio_output_path: str):
+    """Extracts audio from a video file using FFmpeg."""
+    cmd = ["ffmpeg", "-i", video_path, "-q:a", "0", "-map", "a", audio_output_path, "-y"]
+    
+    ffmpeg_args = [
+         "-i", video_path, "-q:a", "0", "-map", "a", audio_output_path, "-y"]
+    
+    done = run_ffmpeg(ffmpeg_args)
+
+def create_video(target_path: str, fps: float = 30.0, codec: str = "libx264", crf: int = 23) -> None:
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
+
+    temp_audio_path = os.path.join(
+        get_temp_directory_path(target_path), 
+        os.path.splitext(os.path.basename(target_path))[0] + ".aac"
+    )
+    # Video creation with FFmpeg
     run_ffmpeg(
         [
             "-r",
             str(fps),
             "-i",
             os.path.join(temp_directory_path, "%04d.png"),
+            "-i",
+            temp_audio_path,
             "-c:v",
-            modules.globals.video_encoder,
+            codec,
+            "-c:a",
+            "aac",
+            "-b:a", 
+            "128k", 
+            "-shortest",
             "-crf",
-            str(modules.globals.video_quality),
+            str(crf),
             "-pix_fmt",
-            "yuv420p",
+            "yuv420p",  # Ensures broad compatibility
             "-vf",
-            "colorspace=bt709:iall=bt601-6-625:fast=1",
+            "colorspace=bt709:iall=bt601-6-625:fast=1",  # Optional color space conversion
             "-y",
             temp_output_path,
         ]
     )
 
-
-def restore_audio(target_path: str, output_path: str) -> None:
-    temp_output_path = get_temp_output_path(target_path)
-    done = run_ffmpeg(
-        [
-            "-i",
-            temp_output_path,
-            "-i",
-            target_path,
-            "-c:v",
-            "copy",
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-y",
-            output_path,
-        ]
-    )
-    if not done:
-        move_temp(target_path, output_path)
 
 
 def get_temp_frame_paths(target_path: str) -> List[str]:

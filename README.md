@@ -77,6 +77,12 @@ DOCKERFILE_PATH=docker/Dockerfile.cuda12-2
 Special thanks to the original authors and contributors of [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam).
 Additionally, thanks to the creator of the initial `docker-compose.yml` and `Dockerfile` used in this project ([DeepLiveCam](https://github.com/AVGRadmin/DeepLiveCam)).
 
+
+## Donations (bitcoin)
+Any donations would be appreciated and boosts morale to continue working the project!
+
+Donations can be made to the following Bitcoind address: `1JJgBnAW2sdDFURJRW8znJYqKNBjcG1mBs`
+
 # Original readme:
 
 <h1 align="center">Deep-Live-Cam</h1>

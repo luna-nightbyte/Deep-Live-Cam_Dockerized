@@ -1,4 +1,4 @@
-# Deep-Live-Cam-Cloud (In Development)
+# Deep-Live-Cam
 
 ## Overview
 This project is a Dockerized, CLI-based version of the original [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam), optimized for batch processing and cloud deployment. It supports:

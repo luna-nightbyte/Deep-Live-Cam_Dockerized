@@ -25,7 +25,6 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /dev/video0:/dev/video0
       - /dev/video1:/dev/video1
-      - ./pyPackages/gfpgan_v1:/tmp/gfpgan
     deploy:
       resources:
         reservations:
@@ -36,4 +35,4 @@ services:
     tty: true
     privileged: true
     runtime: nvidia
-    #command: [ "/bin/bash" ] #, "/app/docker_script.sh" ]
+    #command: [ "/bin/bash", "/app/docker_script.sh" ]

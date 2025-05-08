@@ -1,0 +1,47 @@
+FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04
+
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+RUN apt-get update && apt-get install -y \
+        python3.10 python3.10-dev python3-pip \
+        build-essential cmake git ffmpeg \
+        libglib2.0-0 libgl1-mesa-glx libsm6 \
+        libxrender-dev libgomp1 python3-tk curl \
+        wget ca-certificates gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+RUN wget https://developer.download.nvidia.com/compute/cudnn/9.9.0/local_installers/cudnn-local-repo-ubuntu2204-9.9.0_1.0-1_amd64.deb 
+RUN dpkg -i cudnn-local-repo-ubuntu2204-9.9.0_1.0-1_amd64.deb 
+RUN mkdir -p /usr/share/keyrings 
+RUN cp /var/cudnn-local-repo-ubuntu2204-9.9.0/cudnn-*-keyring.gpg /usr/share/keyrings/ 
+#RUN sed -i 's|deb file:/var/cudnn-local-repo-|deb [signed-by=/usr/share/keyrings/cudnn-archive-keyring.gpg] file:/var/cudnn-local-repo-|g' /etc/apt/sources.list.d/cudnn-local.list
+RUN rm cudnn-local-repo-ubuntu2204-9.*.deb
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    cudnn cudnn-cuda-12 \
+    && rm -rf /var/lib/apt/lists/*
+ 
+RUN pip uninstall -y torch torchvision torch-tensorrt torch_tensorrt 
+
+RUN pip install --no-cache-dir --force-reinstall \
+      numpy==1.23.5 \
+      torch==2.2.2+cu121 \
+      torchvision==0.17.2+cu121 \
+      torch-tensorrt==2.2.0+cu121 \
+      --find-links https://download.pytorch.org/whl/cu121/torch_stable.html
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip uninstall basicsr -y && \
+    pip install git+https://github.com/xinntao/BasicSR.git@master && \
+    pip uninstall gfpgan -y && \
+    pip install git+https://github.com/TencentARC/GFPGAN.git@master
+
+COPY . /app
+ENTRYPOINT ["/bin/bash", "docker_script.sh"]

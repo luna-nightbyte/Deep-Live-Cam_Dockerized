@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  Deep-Batch-Swapper:
+    container_name: ${CONTAINER_NAME}
+    image: ${IMAGE_NAME}
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE_PATH}
+    ports:
+      - "${PORT}:${CONTAINER_PORT}"
+    environment:
+      # System environments
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
+    volumes:
+      - .env:/app/.env
+      - ${APP_DIR}:/app
+      - ${STARTUP_SCRIPT}:/app/docker_script.sh
+      - ${MODELS_DIR}/.insightface:/root/.insightface
+      - ${MODELS_DIR}/.insightface:/app/.insightface
+      - ${MODELS_DIR}/gfpgan:/app/gfpgan
+      - ${MODELS_DIR}:/app/models
+      - ${OUTPUT_DIR}:/app/output
+      - ./apps/Deep-Live-Cam-MAIN-V2/modules:/app/modules
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+      - ./pyPackages/gfpgan_v1:/tmp/gfpgan
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    tty: true
+    privileged: true
+    runtime: nvidia
+    #command: [ "/bin/bash" ] #, "/app/docker_script.sh" ]

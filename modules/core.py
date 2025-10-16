@@ -250,7 +250,7 @@ def destroy(to_quit=True) -> None:
     if to_quit: quit()
 
 
-def run() -> None:
+def run() -> None: 
     parse_args()
     source_files: List[str] = []
     target_files: List[str] = []
@@ -262,13 +262,18 @@ def run() -> None:
         source_files.append(modules.globals.source_path)
     if len(target_files) == 0:
         target_files.append(modules.globals.target_path)  
+    print("Sources:",len(source_files),source_files) 
     for source_path in source_files:
-        if is_image(source_path):
-            modules.globals.source_path = source_path
-            for target_path in target_files:
-                if is_image(target_path) or is_video(target_path):
-                    modules.globals.target_path = target_path
-                    pre_start()
+        if source_path is None: # Ui mode
+            pre_start()
+            break
+        else:
+            if is_image(source_path):
+                modules.globals.source_path = source_path
+                for target_path in target_files:
+                    if is_image(target_path) or is_video(target_path):
+                        modules.globals.target_path = target_path
+                        pre_start()
             
 
 
@@ -280,7 +285,9 @@ def pre_start():
             return
     limit_resources()
     if modules.globals.headless:
+        print("UheadlessI")
         start()
     else:
+        print("UI")
         window = ui.init(start, destroy, modules.globals.lang)
         window.mainloop()

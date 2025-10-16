@@ -207,3 +207,20 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
 
 def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+
+def list_files(folder_path: str, recursive: bool = False) -> List[str]:
+    """
+    List all files in a folder.
+    
+    Args:
+        folder_path (str): Path to the folder.
+        recursive (bool): If True, include files in subfolders.
+        
+    Returns:
+        List[str]: List of file paths as strings.
+    """
+    folder = Path(folder_path)
+    if recursive:
+        return [str(f) for f in folder.rglob('*') if f.is_file()]
+    else:
+        return [str(f) for f in folder.glob('*') if f.is_file()]

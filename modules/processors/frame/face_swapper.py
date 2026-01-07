@@ -1,8 +1,9 @@
-from typing import Any, List
+from typing import Any, List, Optional
 import cv2
 import insightface
 import threading
 import numpy as np
+import platform
 import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
@@ -14,9 +15,9 @@ from modules.utilities import (
     is_video,
 )
 from modules.cluster_analysis import find_closest_centroid
-# Removed modules.globals.face_swapper_enabled - assuming controlled elsewhere or implicitly true if used
-# Removed modules.globals.opacity - accessed via getattr
 import os
+from collections import deque
+import time
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
@@ -25,6 +26,16 @@ NAME = "DLC.FACE-SWAPPER"
 # --- START: Added for Interpolation ---
 PREVIOUS_FRAME_RESULT = None # Stores the final processed frame from the previous step
 # --- END: Added for Interpolation ---
+
+# --- START: Mac M1-M5 Optimizations ---
+IS_APPLE_SILICON = platform.system() == 'Darwin' and platform.machine() == 'arm64'
+FRAME_CACHE = deque(maxlen=3)  # Cache for frame reuse
+FACE_DETECTION_CACHE = {}  # Cache face detections
+LAST_DETECTION_TIME = 0
+DETECTION_INTERVAL = 0.033  # ~30 FPS detection rate for live mode
+FRAME_SKIP_COUNTER = 0
+ADAPTIVE_QUALITY = True
+# --- END: Mac M1-M5 Optimizations ---
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
@@ -63,22 +74,40 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+            model_name = "inswapper_128.onnx"
+            if "CUDAExecutionProvider" in modules.globals.execution_providers:
+                model_name = "inswapper_128_fp16.onnx"
+            model_path = os.path.join(models_dir, model_name)
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
-                # Ensure the providers list is correctly passed
-                providers = modules.globals.execution_providers
-                # print(f"Attempting to load model with providers: {providers}") # Debug print
+                # Optimized provider configuration for Apple Silicon
+                providers_config = []
+                for p in modules.globals.execution_providers:
+                    if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
+                        # Enhanced CoreML configuration for M1-M5
+                        providers_config.append((
+                            "CoreMLExecutionProvider",
+                            {
+                                "ModelFormat": "MLProgram",
+                                "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
+                                "SpecializationStrategy": "FastPrediction",
+                                "AllowLowPrecisionAccumulationOnGPU": 1,
+                                "EnableOnSubgraphs": 1,
+                                "RequireStaticShapes": 0,
+                                "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
+                            }
+                        ))
+                    else:
+                        providers_config.append(p)
+                
                 FACE_SWAPPER = insightface.model_zoo.get_model(
-                    model_path, providers=providers
+                    model_path,
+                    providers=providers_config,
                 )
                 update_status("Face swapper model loaded successfully.", NAME)
             except Exception as e:
                 update_status(f"Error loading face swapper model: {e}", NAME)
-                # print traceback maybe?
-                # import traceback
-                # traceback.print_exc()
-                FACE_SWAPPER = None # Ensure it remains None on failure
+                FACE_SWAPPER = None
                 return None
     return FACE_SWAPPER
 
@@ -87,19 +116,22 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     face_swapper = get_face_swapper()
     if face_swapper is None:
         update_status("Face swapper model not loaded or failed to load. Skipping swap.", NAME)
-        return temp_frame # Return original frame if model failed or not loaded
+        return temp_frame
 
     # Store a copy of the original frame before swapping for opacity blending
     original_frame = temp_frame.copy()
 
-    # --- Pre-swap Input Check (Optional but good practice) ---
+    # Pre-swap Input Check with optimization
     if temp_frame.dtype != np.uint8:
-        # print(f"Warning: Input frame is {temp_frame.dtype}, converting to uint8 before swap.")
         temp_frame = np.clip(temp_frame, 0, 255).astype(np.uint8)
-    # --- End Input Check ---
 
-    # Apply the face swap
+    # Apply the face swap with optimized memory handling
     try:
+        # For Apple Silicon, use optimized inference
+        if IS_APPLE_SILICON:
+            # Ensure contiguous memory layout for better performance
+            temp_frame = np.ascontiguousarray(temp_frame)
+        
         swapped_frame_raw = face_swapper.get(
             temp_frame, target_face, source_face, paste_back=True
         )
@@ -156,13 +188,42 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             )
 
             if getattr(modules.globals, "show_mouth_mask_box", False):
-                mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-                # Draw visualization on the swapped_frame *before* opacity blending
-                swapped_frame = draw_mouth_mask_visualization(
-                    swapped_frame, target_face, mouth_mask_data
-                )
-
-    # Apply opacity blend between the original frame and the swapped frame
+                        mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+                        # Draw visualization on the swapped_frame *before* opacity blending
+                        swapped_frame = draw_mouth_mask_visualization(
+                            swapped_frame, target_face, mouth_mask_data
+                        )
+        
+            # --- Poisson Blending ---
+            if getattr(modules.globals, "poisson_blend", False):
+                face_mask = create_face_mask(target_face, temp_frame)
+                if face_mask is not None:
+                    # Find bounding box of the mask
+                    y_indices, x_indices = np.where(face_mask > 0)
+                    if len(x_indices) > 0 and len(y_indices) > 0:
+                        x_min, x_max = np.min(x_indices), np.max(x_indices)
+                        y_min, y_max = np.min(y_indices), np.max(y_indices)
+        
+                        # Calculate center
+                        center = (int((x_min + x_max) / 2), int((y_min + y_max) / 2))
+        
+                        # Crop src and mask
+                        src_crop = swapped_frame[y_min : y_max + 1, x_min : x_max + 1]
+                        mask_crop = face_mask[y_min : y_max + 1, x_min : x_max + 1]
+        
+                        try:
+                            # Use original_frame as destination to blend the swapped face onto it
+                            swapped_frame = cv2.seamlessClone(
+                                src_crop,
+                                original_frame,
+                                mask_crop,
+                                center,
+                                cv2.NORMAL_CLONE,
+                            )
+                        except Exception as e:
+                            print(f"Poisson blending failed: {e}")
+        
+            # Apply opacity blend between the original frame and the swapped frame
     opacity = getattr(modules.globals, "opacity", 1.0)
     # Ensure opacity is within valid range [0.0, 1.0]
     opacity = max(0.0, min(1.0, opacity))
@@ -177,14 +238,50 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return final_swapped_frame
 
 
+# --- START: Mac M1-M5 Optimized Face Detection ---
+def get_faces_optimized(frame: Frame, use_cache: bool = True) -> Optional[List[Face]]:
+    """Optimized face detection for live mode on Apple Silicon"""
+    global LAST_DETECTION_TIME, FACE_DETECTION_CACHE
+    
+    if not use_cache or not IS_APPLE_SILICON:
+        # Standard detection
+        if modules.globals.many_faces:
+            return get_many_faces(frame)
+        else:
+            face = get_one_face(frame)
+            return [face] if face else None
+    
+    # Adaptive detection rate for live mode
+    current_time = time.time()
+    time_since_last = current_time - LAST_DETECTION_TIME
+    
+    # Skip detection if too soon (adaptive frame skipping)
+    if time_since_last < DETECTION_INTERVAL and FACE_DETECTION_CACHE:
+        return FACE_DETECTION_CACHE.get('faces')
+    
+    # Perform detection
+    LAST_DETECTION_TIME = current_time
+    if modules.globals.many_faces:
+        faces = get_many_faces(frame)
+    else:
+        face = get_one_face(frame)
+        faces = [face] if face else None
+    
+    # Cache results
+    FACE_DETECTION_CACHE['faces'] = faces
+    FACE_DETECTION_CACHE['timestamp'] = current_time
+    
+    return faces
+# --- END: Mac M1-M5 Optimized Face Detection ---
+
 # --- START: Helper function for interpolation and sharpening ---
 def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.ndarray]) -> Frame:
-    """Applies sharpening and interpolation."""
+    """Applies sharpening and interpolation with Apple Silicon optimizations."""
     global PREVIOUS_FRAME_RESULT
 
     processed_frame = current_frame.copy()
 
-    # 1. Apply Sharpening (if enabled)
+    # 1. Apply Sharpening (if enabled) with optimized kernel for Apple Silicon
     sharpness_value = getattr(modules.globals, "sharpness", 0.0)
     if sharpness_value > 0.0 and swapped_face_bboxes:
         height, width = processed_frame.shape[:2]
@@ -207,23 +304,21 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
                 continue
 
             face_region = processed_frame[y1:y2, x1:x2]
-            if face_region.size == 0: continue # Skip empty regions
+            if face_region.size == 0: continue
 
-            # Apply sharpening using addWeighted for smoother control
-            # Use try-except for GaussianBlur and addWeighted as they can fail on invalid inputs
+            # Apply sharpening with optimized parameters for Apple Silicon
             try:
-                 blurred = cv2.GaussianBlur(face_region, (0, 0), 3) # sigma=3, kernel size auto
-                 sharpened_region = cv2.addWeighted(
+                # Use smaller sigma for faster processing on Apple Silicon
+                sigma = 2 if IS_APPLE_SILICON else 3
+                blurred = cv2.GaussianBlur(face_region, (0, 0), sigma)
+                sharpened_region = cv2.addWeighted(
                     face_region, 1.0 + sharpness_value,
                     blurred, -sharpness_value,
                     0
-                 )
-                 # Ensure the sharpened region doesn't have invalid values
-                 sharpened_region = np.clip(sharpened_region, 0, 255).astype(np.uint8)
-                 processed_frame[y1:y2, x1:x2] = sharpened_region
-            except cv2.error as sharpen_e:
-                # print(f"Warning: OpenCV error during sharpening: {sharpen_e} for bbox {bbox}") # Debug
-                # Skip sharpening for this region if it fails
+                )
+                sharpened_region = np.clip(sharpened_region, 0, 255).astype(np.uint8)
+                processed_frame[y1:y2, x1:x2] = sharpened_region
+            except cv2.error:
                 pass
 
 
@@ -323,7 +418,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     source_target_pairs = []
 
     # Ensure maps exist before accessing them
-    souce_target_map = getattr(modules.globals, "souce_target_map", None)
+    source_target_map = getattr(modules.globals, "source_target_map", None)
     simple_map = getattr(modules.globals, "simple_map", None)
 
     # Check if target is a file path (image or video) or live stream
@@ -331,11 +426,11 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 
     if is_file_target:
         # Processing specific image or video file with pre-analyzed maps
-        if souce_target_map:
+        if source_target_map:
             if modules.globals.many_faces:
                 source_face = default_source_face() # Use default source for all targets
                 if source_face:
-                    for map_data in souce_target_map:
+                    for map_data in source_target_map:
                         if is_image(modules.globals.target_path):
                             target_info = map_data.get("target", {})
                             if target_info: # Check if target info exists
@@ -353,7 +448,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                                          for target_face in faces_in_frame:
                                              source_target_pairs.append((source_face, target_face))
             else: # Single face or specific mapping
-                 for map_data in souce_target_map:
+                 for map_data in source_target_map:
                     source_info = map_data.get("source", {})
                     if not source_info: continue # Skip if no source info
                     source_face = source_info.get("face")

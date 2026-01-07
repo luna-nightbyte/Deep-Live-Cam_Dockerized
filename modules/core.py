@@ -19,7 +19,7 @@ import modules.globals
 import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, list_files
+from modules.utilities import list_files, has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -33,8 +33,6 @@ def parse_args() -> None:
     program = argparse.ArgumentParser()
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
-    program.add_argument('-sf', '--source_folder', help='select an source folder path', dest='source_folder_path')
-    program.add_argument('-tf', '--target_folder', help='select an target folder path', dest='target_folder_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
     program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
@@ -64,8 +62,6 @@ def parse_args() -> None:
 
     modules.globals.source_path = args.source_path
     modules.globals.target_path = args.target_path
-    modules.globals.source_folder_path = args.source_folder_path
-    modules.globals.target_folder_path = args.target_folder_path
     modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
     modules.globals.frame_processors = args.frame_processor
     modules.globals.headless = args.source_path or args.target_path or args.output_path
@@ -180,8 +176,6 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
         ui.update_status(message)
 
 def start() -> None:
-
-        
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
@@ -250,7 +244,7 @@ def destroy(to_quit=True) -> None:
     if to_quit: quit()
 
 
-def run() -> None: 
+def run() -> None:
     parse_args()
     source_files: List[str] = []
     target_files: List[str] = []
@@ -262,22 +256,18 @@ def run() -> None:
         source_files.append(modules.globals.source_path)
     if len(target_files) == 0:
         target_files.append(modules.globals.target_path)  
-    print("Sources:",len(source_files),source_files) 
     for source_path in source_files:
-        if source_path is None: # Ui mode
-            pre_start()
-            break
-        else:
-            if is_image(source_path):
-                modules.globals.source_path = source_path
-                for target_path in target_files:
-                    if is_image(target_path) or is_video(target_path):
-                        modules.globals.target_path = target_path
-                        pre_start()
+        if is_image(source_path):
+            modules.globals.source_path = source_path
+            for target_path in target_files:
+                if is_image(target_path) or is_video(target_path):
+                    modules.globals.target_path = target_path
+                    pre_start()
             
 
 
 def pre_start():
+    parse_args()
     if not pre_check():
         return
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
@@ -285,9 +275,7 @@ def pre_start():
             return
     limit_resources()
     if modules.globals.headless:
-        print("UheadlessI")
         start()
     else:
-        print("UI")
         window = ui.init(start, destroy, modules.globals.lang)
         window.mainloop()

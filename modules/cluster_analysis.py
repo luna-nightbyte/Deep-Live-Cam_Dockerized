@@ -20,13 +20,13 @@ def find_cluster_centroids(embeddings, max_k=10) -> Any:
 
     return optimal_centroids
 
-def find_closest_centroid(centroids: list, normed_face_embedding) -> list:
+def find_closest_centroid(centroids: list, normed_face_embedding) -> tuple:
     try:
         centroids = np.array(centroids)
         normed_face_embedding = np.array(normed_face_embedding)
         similarities = np.dot(centroids, normed_face_embedding)
         closest_centroid_index = np.argmax(similarities)
-        
+
         return closest_centroid_index, centroids[closest_centroid_index]
-    except ValueError:
-        return None
+    except (ValueError, IndexError):
+        return None, None

@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import Any,  List, Tuple
 import insightface
+import threading
 
 import cv2
 import numpy as np
@@ -13,124 +14,36 @@ from modules.utilities import get_temp_directory_path, create_temp, extract_fram
 from pathlib import Path
 
 FACE_ANALYSER = None
-DetectedFace = dict  # Define a type alias for detected objects.  Use a dictionary
+FACE_ANALYSER_LOCK = threading.Lock()
 
 
 def get_face_analyser() -> Any:
+    """Get face analyser with thread-safe initialization."""
     global FACE_ANALYSER
 
     if FACE_ANALYSER is None:
-        FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
-        FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        with FACE_ANALYSER_LOCK:
+            # Double-check after acquiring lock
+            if FACE_ANALYSER is None:
+                FACE_ANALYSER = insightface.app.FaceAnalysis(
+                    name='buffalo_l',
+                    providers=modules.globals.execution_providers,
+                    allowed_modules=['detection', 'recognition', 'landmark_2d_106']
+                )
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
     return FACE_ANALYSER
 
 
+def _is_dml() -> bool:
+    return any("DmlExecutionProvider" in p for p in modules.globals.execution_providers)
 
-def rotate_image(image: Frame, angle: float) -> Frame:
-    """
-    Rotates the image by the given angle (in degrees) around its center.
 
-    Args:
-        image: The image to rotate.
-        angle: The angle of rotation in degrees.
-
-    Returns:
-        The rotated image.
-    """
-    (h, w) = image.shape[:2]
-    center = (w / 2, h / 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)  # Rotation matrix
-    rotated = cv2.warpAffine(image, M, (w, h))
-    return rotated
-
-def get_best_direction(frame: Frame) -> Tuple[float, float]:
-    """
-    Analyzes the frame to determine the best direction based on object detection
-    scores.  It efficiently checks a few key angles.
-
-    Args:
-        frame: The input frame (image) as a NumPy array.
-
-    Returns:
-        A tuple containing:
-        - The best angle (in degrees).
-        - The highest detection score found at that angle.
-    """
-    best_angle = 0.0
-    highest_score = -1.0  # Initialize with a very low score
-    angles_to_check = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, -15, -30, -45, -60, -75, -90, -105, -120, -135, -150, -165, -180]  # Check straight, and diagonals.
- 
-    for angle in angles_to_check:
-        rotated_frame = rotate_image(frame, angle) # Rotate the image
-        faces = get_face_analyser().get(rotated_frame)  # Detect objects in rotated frame
-
-        if faces:
-            # Find the object with the highest detection score in the *current* rotation
-            best_object_for_angle = max(faces, key=lambda x: x["det_score"])
-            score = best_object_for_angle["det_score"]
-            new_angles_to_check = [angle+12.5,angle+10, angle+7.5, angle+5, angle+2.5, angle-2.5, angle-5, angle-7.5, angle-10, angle-12.5]
-            
-            for final_angle in new_angles_to_check:
-                rotated_frame = rotate_image(rotated_frame, angle) # Rotate the image
-                faces = get_face_analyser().get(rotated_frame)
-
-                if score > highest_score:
-                    highest_score = score
-                    best_angle = final_angle
-
-    return best_angle, highest_score
-
-def get_one_object(frame: Frame):
-    """
-    Gets the most relevant object from the frame.  Now incorporates the
-    efficient angle checking.
-
-    Args:
-        frame: The input frame.
-
-    Returns:
-        The object with the highest detection score found among the checked angles,
-        or None if no objects are found.
-    """
-    
-    if frame is None:
-        return None, frame
-    best_angle, highest_score = get_best_direction(frame) # Get best angle and score.
-    if highest_score > -1: # Check if any object was detected
-        rotated_frame = rotate_image(frame, best_angle) # Rotate to best angle
-        faces = get_face_analyser().get(rotated_frame) # get objects.
-        # Find the object with the highest score in the rotated frame.
-        best_object = max(faces, key=lambda x: x["det_score"])
-        return best_object, rotated_frame
-    else:
-        return None, frame # No objects found
-def run_detection(frame: Frame):
-    """
-    Gets the most relevant object from the frame.  Now incorporates the
-    efficient angle checking.
-
-    Args:
-        frame: The input frame.
-
-    Returns:
-        The object with the highest detection score found among the checked angles,
-        or None if no objects are found.
-    """
-    
-    if frame is None:
-        return None, frame
-    best_angle, highest_score = get_best_direction(frame) # Get best angle and score.
-    if highest_score > -1: # Check if any object was detected
-        rotated_frame = rotate_image(frame, best_angle) # Rotate to best angle
-        faces = get_face_analyser().get(rotated_frame) # get objects.
-        # Find the object with the highest score in the rotated frame.
-        best_object = max(faces, key=lambda x: x["det_score"])
-        return best_object, rotated_frame, highest_score
-    else:
-        return None, frame # No objects found
-    
 def get_one_face(frame: Frame) -> Any:
-    face = get_face_analyser().get(frame)
+    if _is_dml():
+        with modules.globals.dml_lock:
+            face = get_face_analyser().get(frame)
+    else:
+        face = get_face_analyser().get(frame)
     try:
         return min(face, key=lambda x: x.bbox[0])
     except ValueError:
@@ -138,7 +51,11 @@ def get_one_face(frame: Frame) -> Any:
 
 def get_many_faces(frame: Frame) -> Any:
     try:
-        return get_face_analyser().get(frame)
+        if _is_dml():
+            with modules.globals.dml_lock:
+                return get_face_analyser().get(frame)
+        else:
+            return get_face_analyser().get(frame)
     except IndexError:
         return None
 

@@ -1,4 +1,4 @@
-<h1 align="center">Deep-Live-Cam</h1>
+<h1 align="center">Deep-Live-Cam 2.1</h1>
 
 <p align="center">
   Real-time face swap and video deepfake with a single click and only a single image.
@@ -30,11 +30,19 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
+<<<<<<< HEAD
 ## Exclusive v2.0 Quick Start - Pre-built (Windows)
 
   <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU.
+=======
+## Exclusive v2.7 beta Quick Start - Pre-built (Windows/Mac Silicon/CPU)
+
+  <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
+
+##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU, CPU or Mac Silicon, And you'll receive special priority support. 2.7 beta is the best you can have with 30+ extra features than the open source version.
+>>>>>>> 1edc4bc298e7894749bc2beb48d6dd8bf2d4944e
  
 ###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. This will be 60 days ahead on the open source version.
 
@@ -124,7 +132,7 @@ cd Deep-Live-Cam
 
 **3. Download the Models**
 
-1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
+1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.onnx)
 2. [inswapper\_128\_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
 
 Place these files in the "**models**" folder.
@@ -300,6 +308,7 @@ python run.py --execution-provider openvino
 -   Use a screen capture tool like OBS to stream.
 -   To change the face, select a new source image.
 
+<<<<<<< HEAD
 ## Tips and Tricks
 
 Check out these helpful guides to get the most out of Deep-Live-Cam:
@@ -312,6 +321,10 @@ Check out these helpful guides to get the most out of Deep-Live-Cam:
 - [Instant Vtuber!](https://deeplivecam.net/index.php/blog/tips-and-tricks/instant-vtuber) - Create a new persona/vtuber easily using Metahuman Creator
 
 Visit our [official blog](https://deeplivecam.net/index.php/blog/tips-and-tricks) for more tips and tutorials.
+=======
+## Download all models in this huggingface link
+- [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
+>>>>>>> 1edc4bc298e7894749bc2beb48d6dd8bf2d4944e
 
 ## Command Line Arguments (Unmaintained)
 
@@ -342,6 +355,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 ## Press
 
+<<<<<<< HEAD
 **We are always open to criticism and are ready to improve, that's why we didn't cherry-pick anything.**
 
  - [*"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - Ars Technica
@@ -356,10 +370,24 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
  - [*"This real-time webcam deepfake tool raises alarms about the future of identity theft"*](https://www.diyphotography.net/this-real-time-webcam-deepfake-tool-raises-alarms-about-the-future-of-identity-theft/) - DIYPhotography
  - [*"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - SomeOrdinaryGamers
  - [*"Alright look look look, now look chat, we can do any face we want to look like chat"*](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - IShowSpeed
+=======
+ - [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - *"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*
+ - [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - *"OK, this viral AI live stream software is truly terrifying"*
+ - [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - *"AI can clone faces on webcam; understand how it works"*
+ - [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - *"Get to know Deep Live Cam technology, it can be used as a tool for deception."*
+ - [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - *"AI vs AI: DeepFakes and eKYC"*
+ - [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - *"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"*
+ - [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - *"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*
+ - [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - *"Alright look look look, now look chat, we can do any face we want to look like chat"*
+ - [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - *"They do a pretty good job matching poses, expression and even the lighting"*
+ - [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - *"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"*
+
+>>>>>>> 1edc4bc298e7894749bc2beb48d6dd8bf2d4944e
 
 ## Credits
 
 -   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
+-   [Henry](https://github.com/henryruhs): One of the major contributor in this repo
 -   [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
 -   [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
 -   [GosuDRM](https://github.com/GosuDRM): for the open version of roop
@@ -367,6 +395,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 -   [vic4key](https://github.com/vic4key): For supporting/contributing to this project
 -   [kier007](https://github.com/kier007): for improving the user experience
 -   [qitianai](https://github.com/qitianai): for multi-lingual support
+-   [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
 -   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 -   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 -   All the wonderful users who helped make this project go viral by starring the repo ❤️

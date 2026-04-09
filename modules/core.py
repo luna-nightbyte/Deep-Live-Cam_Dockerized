@@ -2,7 +2,7 @@ import os
 import sys
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
-    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['OMP_NUM_THREADS'] = '6'
 # reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
@@ -11,7 +11,11 @@ import platform
 import signal
 import shutil
 import argparse
-import torch
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
 import onnxruntime
 import tensorflow
 
@@ -19,13 +23,14 @@ import modules.globals
 import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, run_disk_check
-from modules.face_analyser import run_detection
-if 'ROCMExecutionProvider' in modules.globals.execution_providers:
+from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+
+if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
 
 warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
-warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
+if HAS_TORCH:
+    warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 
 
 def parse_args() -> None:
@@ -35,10 +40,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('-sf', '--source_folder', help='select an source folder with images', dest='source_path_folder')
-    program.add_argument('-tf', '--target_folder', help='select an target folder', dest='target_path_folder')
-    program.add_argument('-of', '--output_folder', help='select output directory', dest='output_path')
-    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
+    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -88,11 +90,9 @@ def parse_args() -> None:
     modules.globals.execution_threads = args.execution_threads
     modules.globals.lang = args.lang
 
-    #for ENHANCER tumbler:
-    if 'face_enhancer' in args.frame_processor:
-        modules.globals.fp_ui['face_enhancer'] = True
-    else:
-        modules.globals.fp_ui['face_enhancer'] = False
+    #for ENHANCER tumblers:
+    for enhancer_key in ('face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'):
+        modules.globals.fp_ui[enhancer_key] = enhancer_key in args.frame_processor
 
     # translate deprecated args
     if args.source_path_deprecated:
@@ -136,11 +136,22 @@ def suggest_execution_providers() -> List[str]:
 
 
 def suggest_execution_threads() -> int:
+    """Suggest optimal thread count based on hardware and execution provider."""
+    import os
+    
+    # Get CPU count
+    cpu_count = os.cpu_count() or 4
+    
     if 'DmlExecutionProvider' in modules.globals.execution_providers:
         return 1
     if 'ROCMExecutionProvider' in modules.globals.execution_providers:
         return 1
-    return 8
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+        # For CUDA, use more threads for parallel frame processing
+        return min(cpu_count, 16)
+    
+    # For CPU execution, use most cores but leave some for system
+    return max(4, min(cpu_count - 2, 16))
 
 
 def limit_resources() -> None:
@@ -163,7 +174,7 @@ def limit_resources() -> None:
 
 
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers and HAS_TORCH:
         torch.cuda.empty_cache()
 
 
@@ -183,180 +194,99 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
         ui.update_status(message)
 
 def start() -> None:
-
-    if modules.globals.source_folder is not None and  os.path.exists(modules.globals.source_folder):
-        sourceFiles = next(os.walk(modules.globals.source_folder), (None, None, []))[2]
-        modules.globals.source_path = os.path.join(modules.globals.source_folder, sourceFiles[0])
-    else:
-        sourceFiles = [modules.globals.source_path]
-
-    if modules.globals.target_folder is not None and  os.path.exists(modules.globals.target_folder):
-        targetFiles = next(os.walk(modules.globals.target_folder), (None, None, []))[2]
-        modules.globals.target_path = os.path.join(modules.globals.target_folder, targetFiles[0])
-    else:
-        targetFiles = [modules.globals.target_path]
+    """Start processing with performance monitoring."""
+    import time
     
+    start_time = time.time()
     
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
-        
-    OUTPUT_FOLDER = modules.globals.output_path
-    file_info = []
-    for file_path in targetFiles:
-        file_path = os.path.join(modules.globals.target_folder, file_path)
-        try:
-            file_size = os.path.getsize(file_path)
-            file_info.append((file_size, file_path))
-        except FileNotFoundError:
-            print(f"Warning: File not found: {file_path}")
-        except Exception as e:
-            print(f"Error getting size for {file_path}: {e}")
-
-    # Sort the list based on file size (the first element of the tuple)
-    file_info.sort()
-    for  target_file in targetFiles:
-        modules.globals.target_path = os.path.join(modules.globals.target_folder, target_file)
-        run_disk_check(modules.globals.target_path)
-    # for source_file in sourceFiles:
-        # modules.globals.source_path = os.path.join(modules.globals.source_folder, source_file)
-        # print("Source path:", modules.globals.source_path )
-        # source_name = os.path.splitext(os.path.basename(source_file))[0]
-        for source_file in sourceFiles:
-            modules.globals.source_path = os.path.join(modules.globals.source_folder, source_file)
-            print("Source path:", modules.globals.source_path )
-            source_name = os.path.splitext(os.path.basename(source_file))[0]
-        # for target_file in targetFiles:
-        #    modules.globals.target_path = os.path.join(modules.globals.target_folder, target_file)
-            modules.globals.output_path = os.path.join(OUTPUT_FOLDER, f"{source_name}_{os.path.basename(target_file)}")
-            
-            print("output path:", modules.globals.output_path )
-            
-            update_status('Processing...')
-            # process image to image
-            if has_image_extension(modules.globals.target_path):
-                if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-                    return
-                try:
-                    shutil.copy2(modules.globals.target_path, modules.globals.output_path)
-                except Exception as e:
-                    print("Error copying file:", str(e))
-                for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-                    update_status('Progressing...', frame_processor.NAME)
-                    frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
-                    release_resources()
-                if is_image(modules.globals.target_path):
-                    update_status('Processing to image succeed!')
-                else:
-                    update_status('Processing to image failed!')
-                continue
-            # process image to videos
-            if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-                continue
-
-            if not modules.globals.map_faces:
-                update_status('Creating temp resources...')
-                create_temp(modules.globals.target_path)
-                update_status('Extracting frames...')
-                extract_frames(modules.globals.target_path)
-
-            temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
-            for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-                update_status('Progressing...', frame_processor.NAME)
-                frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
-                release_resources()
-            # handles fps
-            if modules.globals.keep_fps:
-                update_status('Detecting fps...')
-                fps = detect_fps(modules.globals.target_path)
-                update_status(f'Creating video with {fps} fps...')
-                create_video(modules.globals.target_path, fps)
-            else:
-                update_status('Creating video with 30.0 fps...')
-                create_video(modules.globals.target_path)
-            # handle audio
-            if modules.globals.keep_audio:
-                if modules.globals.keep_fps:
-                    update_status('Restoring audio...')
-                else:
-                    update_status('Restoring audio might cause issues as fps are not kept...')
-                restore_audio(modules.globals.target_path, modules.globals.output_path)
-            else:
-                move_temp(modules.globals.target_path, modules.globals.output_path)
-            # clean and validate
-            clean_temp(modules.globals.target_path)
-            if is_video(modules.globals.target_path):
-                update_status('Processing to video succeed!')
-            else:
-                update_status('Processing to video failed!')
-
-
-
-def sortVideos() -> None:
-
-    if modules.globals.target_folder is not None and  os.path.exists(modules.globals.target_folder):
-        targetFiles = next(os.walk(modules.globals.target_folder), (None, None, []))[2]
-        print("found these files:",targetFiles)
-        print("in:",modules.globals.target_folder)
-        if len(targetFiles) == 0:
-            print("No target files found..")
-            return
-        modules.globals.target_path = os.path.join(modules.globals.target_folder, targetFiles[0])
-    else:
-        targetFiles = [modules.globals.target_path]
+    update_status('Processing...')
     
-     
-        
-    OUTPUT_FOLDER = modules.globals.output_path
-    file_info = []
-    for file_path in targetFiles:
-        file_path = os.path.join(modules.globals.target_folder, file_path)
+    # process image to image
+    if has_image_extension(modules.globals.target_path):
+        if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
+            return
         try:
             file_size = os.path.getsize(file_path)
             file_info.append((file_size, file_path))
         except FileNotFoundError:
             print(f"Warning: File not found: {file_path}")
         except Exception as e:
-            print(f"Error getting size for {file_path}: {e}")
-
-    # Sort the list based on file size (the first element of the tuple)
-    file_info.sort()
-    for  target_file in targetFiles:
-        modules.globals.target_path = os.path.join(modules.globals.target_folder, target_file)
-        # run_disk_check(modules.globals.target_path)
-        modules.globals.target_path = os.path.join(modules.globals.target_folder, target_file)
-        # modules.globals.output_path = os.path.join(OUTPUT_FOLDER, f"{source_name}_{os.path.basename(target_file)}")
-        
-        print("output path:", modules.globals.output_path )
-        
-        import cv2
-        update_status('Processing...')
-        # process image to image
-        if has_image_extension(modules.globals.target_path):
-            obj,frame,score=run_detection(cv2.imread(modules.globals.target_path))
-            print("Core was",score)
+            print("Error copying file:", str(e))
+        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+            update_status('Progressing...', frame_processor.NAME)
+            frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
             release_resources()
-            if is_image(modules.globals.target_path):
-                update_status('Processing to image succeed!')
-            else:
-                update_status('Processing to image failed!')
-            continue
+        if is_image(modules.globals.target_path):
+            elapsed = time.time() - start_time
+            update_status(f'Processing to image succeed! (Time: {elapsed:.2f}s)')
+        else:
+            update_status('Processing to image failed!')
+        return
+    
+    # process image to videos
+    if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
+        return
 
-        # process image to videos
-        if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-            continue
-         
+    extraction_start = time.time()
+    if not modules.globals.map_faces:
         update_status('Creating temp resources...')
         create_temp(modules.globals.target_path)
         update_status('Extracting frames...')
         extract_frames(modules.globals.target_path)
-        temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
-        print("Starting detection..")
-        for frame_path in temp_frame_paths:
-            obj,frame,score=run_detection(cv2.imread(frame_path))
-            print("Score was",score)
-            release_resources()
-         
+    extraction_time = time.time() - extraction_start
+    update_status(f'Frame extraction completed in {extraction_time:.2f}s')
+
+    temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+    total_frames = len(temp_frame_paths)
+    update_status(f'Processing {total_frames} frames with {modules.globals.execution_threads} threads...')
+    
+    processing_start = time.time()
+    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+        update_status('Progressing...', frame_processor.NAME)
+        frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
+        release_resources()
+    processing_time = time.time() - processing_start
+    fps_processing = total_frames / processing_time if processing_time > 0 else 0
+    update_status(f'Frame processing completed in {processing_time:.2f}s ({fps_processing:.2f} fps)')
+    
+    # handles fps
+    encoding_start = time.time()
+    if modules.globals.keep_fps:
+        update_status('Detecting fps...')
+        fps = detect_fps(modules.globals.target_path)
+        update_status(f'Creating video with {fps} fps...')
+        video_created = create_video(modules.globals.target_path, fps)
+    else:
+        update_status('Creating video with 30.0 fps...')
+        video_created = create_video(modules.globals.target_path)
+    encoding_time = time.time() - encoding_start
+    if not video_created:
+        update_status('Video encoding failed. No temporary output video was created.')
+        clean_temp(modules.globals.target_path)
+        return
+    update_status(f'Video encoding completed in {encoding_time:.2f}s')
+    
+    # handle audio
+    if modules.globals.keep_audio:
+        if modules.globals.keep_fps:
+            update_status('Restoring audio...')
+        else:
+            update_status('Restoring audio might cause issues as fps are not kept...')
+        restore_audio(modules.globals.target_path, modules.globals.output_path)
+    else:
+        move_temp(modules.globals.target_path, modules.globals.output_path)
+    
+    # clean and validate
+    clean_temp(modules.globals.target_path)
+    
+    total_time = time.time() - start_time
+    if is_video(modules.globals.target_path) and modules.globals.output_path and os.path.isfile(modules.globals.output_path):
+        update_status(f'Video processing succeeded! Total time: {total_time:.2f}s')
+    else:
+        update_status('Processing to video failed!')
 
 
 def destroy(to_quit=True) -> None:
@@ -373,6 +303,9 @@ def run() -> None:
         update_status(frame_processor)
         if not frame_processor.pre_check():
             return
+    # Pre-load face analyser in main thread before GUI starts
+    #from modules.face_analyser import get_face_analyser
+    #get_face_analyser()
     limit_resources()
     if modules.globals.sort:
         sortVideos()
